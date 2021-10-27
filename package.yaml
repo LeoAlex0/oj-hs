@@ -1,0 +1,76 @@
+name: oj-hs
+version: 0.1.0.0
+github: "LeoAlex0/oj-hs"
+license: BSD3
+author: "zLeoAlex"
+maintainer: "z.alex.leo@outlook.com"
+copyright: "zLeoAlex"
+
+extra-source-files:
+  - README.md
+  - ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description: Please see the README on GitHub at <https://github.com/LeoAlex0/oj-hs#readme>
+
+dependencies:
+  - base >= 4.7 && < 5
+  - deepseq
+
+library:
+  source-dirs: src
+  ghc-options:
+    - -O2
+
+executables:
+  all-in-one:
+    main: Main.hs
+    source-dirs: app/all-in-one
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - haskell-src-exts
+      - haskell-names
+      - syb
+      - hashable
+  luogu-wip:
+    main: Main.hs
+    source-dirs: app/luogu-wip
+    dependencies:
+      - oj-hs
+  codeforces-wip:
+    main: Main.hs
+    source-dirs: app/codeforces-wip
+    dependencies:
+      - oj-hs
+
+tests:
+  oj-hs-test:
+    main: Spec.hs
+    source-dirs: test
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - oj-hs
+
+benchmarks:
+  benchmark-prac-haskell-bench:
+    source-dirs: bench
+    main: BenchMain.hs
+    ghc-options:
+      - -O2
+    dependencies:
+      - oj-hs
+      - criterion
+      - random
+      - deepseq

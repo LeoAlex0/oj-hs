@@ -1,0 +1,113 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           oj-hs
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/LeoAlex0/oj-hs#readme>
+homepage:       https://github.com/LeoAlex0/oj-hs#readme
+bug-reports:    https://github.com/LeoAlex0/oj-hs/issues
+author:         zLeoAlex
+maintainer:     z.alex.leo@outlook.com
+copyright:      zLeoAlex
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/LeoAlex0/oj-hs
+
+library
+  exposed-modules:
+      Codeforces.P1302C
+      Data.FingerTree
+      Data.FingerTree.Measure
+      Data.SegTree
+      Lib
+      Luogu.P1383
+  other-modules:
+      Paths_oj_hs
+  hs-source-dirs:
+      src
+  ghc-options: -O2
+  build-depends:
+      base >=4.7 && <5
+    , deepseq
+  default-language: Haskell2010
+
+executable all-in-one
+  main-is: Main.hs
+  other-modules:
+      Paths_oj_hs
+  hs-source-dirs:
+      app/all-in-one
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , deepseq
+    , hashable
+    , haskell-names
+    , haskell-src-exts
+    , syb
+  default-language: Haskell2010
+
+executable codeforces-wip
+  main-is: Main.hs
+  other-modules:
+      Paths_oj_hs
+  hs-source-dirs:
+      app/codeforces-wip
+  build-depends:
+      base >=4.7 && <5
+    , deepseq
+    , oj-hs
+  default-language: Haskell2010
+
+executable luogu-wip
+  main-is: Main.hs
+  other-modules:
+      Paths_oj_hs
+  hs-source-dirs:
+      app/luogu-wip
+  build-depends:
+      base >=4.7 && <5
+    , deepseq
+    , oj-hs
+  default-language: Haskell2010
+
+test-suite oj-hs-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_oj_hs
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , deepseq
+    , oj-hs
+  default-language: Haskell2010
+
+benchmark benchmark-prac-haskell-bench
+  type: exitcode-stdio-1.0
+  main-is: BenchMain.hs
+  other-modules:
+      Data.FingerTree.Bench
+      Paths_oj_hs
+  hs-source-dirs:
+      bench
+  ghc-options: -O2
+  build-depends:
+      base >=4.7 && <5
+    , criterion
+    , deepseq
+    , oj-hs
+    , random
+  default-language: Haskell2010
