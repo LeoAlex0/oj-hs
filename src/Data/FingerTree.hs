@@ -1,9 +1,7 @@
-{-# LANGUAGE AutoDeriveTypeable #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric          #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 -----------------------------------------------------------------------------
 
@@ -88,14 +86,14 @@ module Data.FingerTree
   )
 where
 
-import Control.Applicative (Applicative (pure, (<*>)), (<$>))
-import Control.DeepSeq (NFData)
-import Data.Foldable (Foldable (foldMap), toList)
-import Data.Monoid
-import Data.Semigroup
-import GHC.Generics
-import Prelude hiding (null, reverse)
-import qualified Prelude (null)
+import           Control.Applicative (Applicative (pure, (<*>)), (<$>))
+import           Control.DeepSeq     (NFData)
+import           Data.Foldable       (Foldable (foldMap), toList)
+import           Data.Monoid
+import           Data.Semigroup
+import           GHC.Generics
+import           Prelude             hiding (null, reverse)
+import qualified Prelude             (null)
 
 infixr 5 ><
 
@@ -133,11 +131,11 @@ data ViewR s a
     )
 
 instance (Functor s) => Functor (ViewL s) where
-  fmap _ EmptyL = EmptyL
+  fmap _ EmptyL    = EmptyL
   fmap f (x :< xs) = f x :< fmap f xs
 
 instance (Functor s) => Functor (ViewR s) where
-  fmap _ EmptyR = EmptyR
+  fmap _ EmptyR    = EmptyR
   fmap f (xs :> x) = fmap f xs :> f x
 
 instance (Measured v a) => Semigroup (FingerTree v a) where
@@ -163,9 +161,9 @@ data Digit a
 instance (NFData a) => NFData (Digit a)
 
 instance Foldable Digit where
-  foldMap f (One a) = f a
-  foldMap f (Two a b) = f a `mappend` f b
-  foldMap f (Three a b c) = f a `mappend` f b `mappend` f c
+  foldMap f (One a)        = f a
+  foldMap f (Two a b)      = f a `mappend` f b
+  foldMap f (Three a b c)  = f a `mappend` f b `mappend` f c
   foldMap f (Four a b c d) = f a `mappend` f b `mappend` f c `mappend` f d
 
 -------------------
@@ -192,7 +190,7 @@ data Node v a = Node2 !v a a | Node3 !v a a a
 instance (NFData v, NFData a) => NFData (Node v a)
 
 instance Foldable (Node v) where
-  foldMap f (Node2 _ a b) = f a `mappend` f b
+  foldMap f (Node2 _ a b)   = f a `mappend` f b
   foldMap f (Node3 _ a b c) = f a `mappend` f b `mappend` f c
 
 node2 :: (Measured v a) => a -> a -> Node v a
@@ -202,11 +200,11 @@ node3 :: (Measured v a) => a -> a -> a -> Node v a
 node3 a b c = Node3 (measure a `mappend` measure b `mappend` measure c) a b c
 
 instance (Monoid v) => Measured v (Node v a) where
-  measure (Node2 v _ _) = v
+  measure (Node2 v _ _)   = v
   measure (Node3 v _ _ _) = v
 
 nodeToDigit :: Node v a -> Digit a
-nodeToDigit (Node2 _ a b) = Two a b
+nodeToDigit (Node2 _ a b)   = Two a b
 nodeToDigit (Node3 _ a b c) = Three a b c
 
 -- | A representation of a sequence of values of type @a@, allowing
@@ -239,8 +237,8 @@ deep pr m sf =
 
 -- | /O(1)/. The cached measure of a tree.
 instance (Measured v a) => Measured v (FingerTree v a) where
-  measure Empty = mempty
-  measure (Single x) = measure x
+  measure Empty          = mempty
+  measure (Single x)     = measure x
   measure (Deep v _ _ _) = v
 
 -- | Elements from left to right.
@@ -251,7 +249,7 @@ instance Foldable (FingerTree v) where
     foldMap f pr `mappend` foldMap (foldMap f) m `mappend` foldMap f sf
 
   null Empty = True
-  null _ = False
+  null _     = False
 
 instance (Eq a) => Eq (FingerTree v a) where
   xs == ys = toList xs == toList ys
@@ -288,13 +286,13 @@ mapNode ::
   (a1 -> a2) ->
   Node v1 a1 ->
   Node v2 a2
-mapNode f (Node2 _ a b) = node2 (f a) (f b)
+mapNode f (Node2 _ a b)   = node2 (f a) (f b)
 mapNode f (Node3 _ a b c) = node3 (f a) (f b) (f c)
 
 mapDigit :: (a -> b) -> Digit a -> Digit b
-mapDigit f (One a) = One (f a)
-mapDigit f (Two a b) = Two (f a) (f b)
-mapDigit f (Three a b c) = Three (f a) (f b) (f c)
+mapDigit f (One a)        = One (f a)
+mapDigit f (Two a b)      = Two (f a) (f b)
+mapDigit f (Three a b c)  = Three (f a) (f b) (f c)
 mapDigit f (Four a b c d) = Four (f a) (f b) (f c) (f d)
 
 -- | Map all elements of the tree with a function that also takes the
@@ -434,7 +432,7 @@ unsafeFmap f (Deep v pr m sf) =
   Deep v (mapDigit f pr) (unsafeFmap (unsafeFmapNode f) m) (mapDigit f sf)
 
 unsafeFmapNode :: (a -> b) -> Node v a -> Node v b
-unsafeFmapNode f (Node2 v a b) = Node2 v (f a) (f b)
+unsafeFmapNode f (Node2 v a b)   = Node2 v (f a) (f b)
 unsafeFmapNode f (Node3 v a b c) = Node3 v (f a) (f b) (f c)
 
 -- | Like 'traverse', but with constraints on the element types.
@@ -460,13 +458,13 @@ traverseNode ::
   (a1 -> f a2) ->
   Node v1 a1 ->
   f (Node v2 a2)
-traverseNode f (Node2 _ a b) = node2 <$> f a <*> f b
+traverseNode f (Node2 _ a b)   = node2 <$> f a <*> f b
 traverseNode f (Node3 _ a b c) = node3 <$> f a <*> f b <*> f c
 
 traverseDigit :: (Applicative f) => (a -> f b) -> Digit a -> f (Digit b)
-traverseDigit f (One a) = One <$> f a
-traverseDigit f (Two a b) = Two <$> f a <*> f b
-traverseDigit f (Three a b c) = Three <$> f a <*> f b <*> f c
+traverseDigit f (One a)        = One <$> f a
+traverseDigit f (Two a b)      = Two <$> f a <*> f b
+traverseDigit f (Three a b c)  = Three <$> f a <*> f b <*> f c
 traverseDigit f (Four a b c d) = Four <$> f a <*> f b <*> f c <*> f d
 
 -- | Traverse the tree from left to right with a function that also
@@ -620,7 +618,7 @@ unsafeTraverseNode ::
   (a -> f b) ->
   Node v a ->
   f (Node v b)
-unsafeTraverseNode f (Node2 v a b) = Node2 v <$> f a <*> f b
+unsafeTraverseNode f (Node2 v a b)   = Node2 v <$> f a <*> f b
 unsafeTraverseNode f (Node3 v a b c) = Node3 v <$> f a <*> f b <*> f c
 
 -----------------------------------------------------
@@ -652,10 +650,10 @@ a <| Deep v pr m sf =
   Deep (measure a `mappend` v) (consDigit a pr) m sf
 
 consDigit :: a -> Digit a -> Digit a
-consDigit a (One b) = Two a b
-consDigit a (Two b c) = Three a b c
+consDigit a (One b)       = Two a b
+consDigit a (Two b c)     = Three a b c
 consDigit a (Three b c d) = Four a b c d
-consDigit _ Four {} = illegalArgument "consDigit"
+consDigit _ Four {}       = illegalArgument "consDigit"
 
 -- | /O(1)/. Add an element to the right end of a sequence.
 -- Mnemonic: a triangle with the single element at the pointy end.
@@ -669,68 +667,68 @@ Deep v pr m sf |> x =
   Deep (v `mappend` measure x) pr m (snocDigit sf x)
 
 snocDigit :: Digit a -> a -> Digit a
-snocDigit (One a) b = Two a b
-snocDigit (Two a b) c = Three a b c
+snocDigit (One a) b       = Two a b
+snocDigit (Two a b) c     = Three a b c
 snocDigit (Three a b c) d = Four a b c d
-snocDigit Four {} _ = illegalArgument "snocDigit"
+snocDigit Four {} _       = illegalArgument "snocDigit"
 
 -- | /O(1)/. Is this the empty sequence?
 null :: FingerTree v a -> Bool
 null Empty = True
-null _ = False
+null _     = False
 
 -- | /O(1)/. Analyse the left end of a sequence.
 viewl :: (Measured v a) => FingerTree v a -> ViewL (FingerTree v) a
-viewl Empty = EmptyL
-viewl (Single x) = x :< Empty
+viewl Empty                 = EmptyL
+viewl (Single x)            = x :< Empty
 viewl (Deep _ (One x) m sf) = x :< rotL m sf
-viewl (Deep _ pr m sf) = lheadDigit pr :< deep (ltailDigit pr) m sf
+viewl (Deep _ pr m sf)      = lheadDigit pr :< deep (ltailDigit pr) m sf
 
 rotL :: (Measured v a) => FingerTree v (Node v a) -> Digit a -> FingerTree v a
 rotL m sf = case viewl m of
-  EmptyL -> digitToTree sf
+  EmptyL  -> digitToTree sf
   a :< m' -> Deep (measure m `mappend` measure sf) (nodeToDigit a) m' sf
 
 lheadDigit :: Digit a -> a
-lheadDigit (One a) = a
-lheadDigit (Two a _) = a
-lheadDigit (Three a _ _) = a
+lheadDigit (One a)        = a
+lheadDigit (Two a _)      = a
+lheadDigit (Three a _ _)  = a
 lheadDigit (Four a _ _ _) = a
 
 ltailDigit :: Digit a -> Digit a
-ltailDigit (One _) = illegalArgument "ltailDigit"
-ltailDigit (Two _ b) = One b
-ltailDigit (Three _ b c) = Two b c
+ltailDigit (One _)        = illegalArgument "ltailDigit"
+ltailDigit (Two _ b)      = One b
+ltailDigit (Three _ b c)  = Two b c
 ltailDigit (Four _ b c d) = Three b c d
 
 -- | /O(1)/. Analyse the right end of a sequence.
 viewr :: (Measured v a) => FingerTree v a -> ViewR (FingerTree v) a
-viewr Empty = EmptyR
-viewr (Single x) = Empty :> x
+viewr Empty                 = EmptyR
+viewr (Single x)            = Empty :> x
 viewr (Deep _ pr m (One x)) = rotR pr m :> x
-viewr (Deep _ pr m sf) = deep pr m (rtailDigit sf) :> rheadDigit sf
+viewr (Deep _ pr m sf)      = deep pr m (rtailDigit sf) :> rheadDigit sf
 
 rotR :: (Measured v a) => Digit a -> FingerTree v (Node v a) -> FingerTree v a
 rotR pr m = case viewr m of
-  EmptyR -> digitToTree pr
+  EmptyR  -> digitToTree pr
   m' :> a -> Deep (measure pr `mappend` measure m) pr m' (nodeToDigit a)
 
 rheadDigit :: Digit a -> a
-rheadDigit (One a) = a
-rheadDigit (Two _ b) = b
-rheadDigit (Three _ _ c) = c
+rheadDigit (One a)        = a
+rheadDigit (Two _ b)      = b
+rheadDigit (Three _ _ c)  = c
 rheadDigit (Four _ _ _ d) = d
 
 rtailDigit :: Digit a -> Digit a
-rtailDigit (One _) = illegalArgument "rtailDigit"
-rtailDigit (Two a _) = One a
-rtailDigit (Three a b _) = Two a b
+rtailDigit (One _)        = illegalArgument "rtailDigit"
+rtailDigit (Two a _)      = One a
+rtailDigit (Three a b _)  = Two a b
 rtailDigit (Four a b c _) = Three a b c
 
 digitToTree :: (Measured v a) => Digit a -> FingerTree v a
-digitToTree (One a) = Single a
-digitToTree (Two a b) = deep (One a) Empty (One b)
-digitToTree (Three a b c) = deep (Two a b) Empty (One c)
+digitToTree (One a)        = Single a
+digitToTree (Two a b)      = deep (One a) Empty (One b)
+digitToTree (Three a b c)  = deep (Two a b) Empty (One c)
 digitToTree (Four a b c d) = deep (Two a b) Empty (Two c d)
 
 ----------------
@@ -750,8 +748,8 @@ appendTree0 (Single x) xs =
   x <| xs
 appendTree0 xs (Single x) =
   xs |> x
-appendTree0 (Deep _ pr1 m1 sf1) (Deep _ pr2 m2 sf2) =
-  deep pr1 (addDigits0 m1 sf1 pr2 m2) sf2
+appendTree0 (Deep v1 pr1 m1 sf1) (Deep v2 pr2 m2 sf2) =
+  Deep (v1 <> v2) pr1 (addDigits0 m1 sf1 pr2 m2) sf2
 
 addDigits0 :: (Measured v a) => FingerTree v (Node v a) -> Digit a -> Digit a -> FingerTree v (Node v a) -> FingerTree v (Node v a)
 addDigits0 m1 (One a) (One b) m2 =
@@ -796,8 +794,8 @@ appendTree1 (Single x) a xs =
   x <| a <| xs
 appendTree1 xs a (Single x) =
   xs |> a |> x
-appendTree1 (Deep _ pr1 m1 sf1) a (Deep _ pr2 m2 sf2) =
-  deep pr1 (addDigits1 m1 sf1 a pr2 m2) sf2
+appendTree1 (Deep v1 pr1 m1 sf1) a (Deep v2 pr2 m2 sf2) =
+  Deep (v1 <> measure a <> v2) pr1 (addDigits1 m1 sf1 a pr2 m2) sf2
 
 addDigits1 :: (Measured v a) => FingerTree v (Node v a) -> Digit a -> a -> Digit a -> FingerTree v (Node v a) -> FingerTree v (Node v a)
 addDigits1 m1 (One a) b (One c) m2 =
@@ -842,8 +840,8 @@ appendTree2 (Single x) a b xs =
   x <| a <| b <| xs
 appendTree2 xs a b (Single x) =
   xs |> a |> b |> x
-appendTree2 (Deep _ pr1 m1 sf1) a b (Deep _ pr2 m2 sf2) =
-  deep pr1 (addDigits2 m1 sf1 a b pr2 m2) sf2
+appendTree2 (Deep v1 pr1 m1 sf1) a b (Deep v2 pr2 m2 sf2) =
+  Deep (v1 <> measure a <> measure b <> v2) pr1 (addDigits2 m1 sf1 a b pr2 m2) sf2
 
 addDigits2 :: (Measured v a) => FingerTree v (Node v a) -> Digit a -> a -> a -> Digit a -> FingerTree v (Node v a) -> FingerTree v (Node v a)
 addDigits2 m1 (One a) b c (One d) m2 =
@@ -888,8 +886,8 @@ appendTree3 (Single x) a b c xs =
   x <| a <| b <| c <| xs
 appendTree3 xs a b c (Single x) =
   xs |> a |> b |> c |> x
-appendTree3 (Deep _ pr1 m1 sf1) a b c (Deep _ pr2 m2 sf2) =
-  deep pr1 (addDigits3 m1 sf1 a b c pr2 m2) sf2
+appendTree3 (Deep v1 pr1 m1 sf1) a b c (Deep v2 pr2 m2 sf2) =
+  Deep (v1 <> measure a <> measure b <> measure c <> v2) pr1 (addDigits3 m1 sf1 a b c pr2 m2) sf2
 
 addDigits3 :: (Measured v a) => FingerTree v (Node v a) -> Digit a -> a -> a -> a -> Digit a -> FingerTree v (Node v a) -> FingerTree v (Node v a)
 addDigits3 m1 (One a) b c d (One e) m2 =
@@ -934,8 +932,8 @@ appendTree4 (Single x) a b c d xs =
   x <| a <| b <| c <| d <| xs
 appendTree4 xs a b c d (Single x) =
   xs |> a |> b |> c |> d |> x
-appendTree4 (Deep _ pr1 m1 sf1) a b c d (Deep _ pr2 m2 sf2) =
-  deep pr1 (addDigits4 m1 sf1 a b c d pr2 m2) sf2
+appendTree4 (Deep v1 pr1 m1 sf1) a b c d (Deep v2 pr2 m2 sf2) =
+  Deep (v1 <> measure a <> measure b <> measure c <> measure d <> v2) pr1 (addDigits4 m1 sf1 a b c d pr2 m2) sf2
 
 addDigits4 :: (Measured v a) => FingerTree v (Node v a) -> Digit a -> a -> a -> a -> a -> Digit a -> FingerTree v (Node v a) -> FingerTree v (Node v a)
 addDigits4 m1 (One a) b c d e (One f) m2 =
@@ -1205,7 +1203,7 @@ deepL ::
   FingerTree v (Node v a) ->
   Digit a ->
   FingerTree v a
-deepL Nothing m sf = rotL m sf
+deepL Nothing m sf   = rotL m sf
 deepL (Just pr) m sf = deep pr m sf
 
 deepR ::
@@ -1214,7 +1212,7 @@ deepR ::
   FingerTree v (Node v a) ->
   Maybe (Digit a) ->
   FingerTree v a
-deepR pr m Nothing = rotR pr m
+deepR pr m Nothing   = rotR pr m
 deepR pr m (Just sf) = deep pr m sf
 
 splitNode ::
@@ -1280,13 +1278,13 @@ reverseTree f (Deep _ pr m sf) =
   deep (reverseDigit f sf) (reverseTree (reverseNode f) m) (reverseDigit f pr)
 
 reverseNode :: (Measured v2 a2) => (a1 -> a2) -> Node v1 a1 -> Node v2 a2
-reverseNode f (Node2 _ a b) = node2 (f b) (f a)
+reverseNode f (Node2 _ a b)   = node2 (f b) (f a)
 reverseNode f (Node3 _ a b c) = node3 (f c) (f b) (f a)
 
 reverseDigit :: (a -> b) -> Digit a -> Digit b
-reverseDigit f (One a) = One (f a)
-reverseDigit f (Two a b) = Two (f b) (f a)
-reverseDigit f (Three a b c) = Three (f c) (f b) (f a)
+reverseDigit f (One a)        = One (f a)
+reverseDigit f (Two a b)      = Two (f b) (f a)
+reverseDigit f (Three a b c)  = Three (f c) (f b) (f a)
 reverseDigit f (Four a b c d) = Four (f d) (f c) (f b) (f a)
 
 illegalArgument :: String -> a
