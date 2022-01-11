@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE UndecidableInstances   #-}
 
 -----------------------------------------------------------------------------
@@ -91,6 +92,7 @@ import           Control.DeepSeq     (NFData)
 import           Data.Foldable       (Foldable (foldMap), toList)
 import           Data.Monoid
 import           Data.Semigroup
+import qualified GHC.Exts            as E (IsList (..))
 import           GHC.Generics
 import           Prelude             hiding (null, reverse)
 import qualified Prelude             (null)
@@ -638,39 +640,32 @@ singleton = Single
 fromList :: (Measured v a) => [a] -> FingerTree v a
 fromList = foldr (<|) Empty
 
+instance (Measured v a) => E.IsList (FingerTree v a) where
+  type Item (FingerTree v a) = a
+  fromList = foldr (<|) Empty
+  toList = Data.Foldable.toList
+
 -- | /O(1)/. Add an element to the left end of a sequence.
 -- Mnemonic: a triangle with the single element at the pointy end.
 (<|) :: (Measured v a) => a -> FingerTree v a -> FingerTree v a
 a <| Empty = Single a
 a <| Single b = deep (One a) Empty (One b)
-a <| Deep v (Four b c d e) m sf =
-  m
-    `seq` Deep (measure a `mappend` v) (Two a b) (node3 c d e <| m) sf
-a <| Deep v pr m sf =
-  Deep (measure a `mappend` v) (consDigit a pr) m sf
-
-consDigit :: a -> Digit a -> Digit a
-consDigit a (One b)       = Two a b
-consDigit a (Two b c)     = Three a b c
-consDigit a (Three b c d) = Four a b c d
-consDigit _ Four {}       = illegalArgument "consDigit"
+a <| Deep v pr m sf = let wSf pr m = Deep (measure a <> v) pr m sf in case pr of
+  Four b c d e -> m `seq` wSf (Two a b) (node3 c d e <| m)
+  Three b c d  -> wSf (Four a b c d) m
+  Two b c      -> wSf (Three a b c) m
+  One b        -> wSf (Two a b) m
 
 -- | /O(1)/. Add an element to the right end of a sequence.
 -- Mnemonic: a triangle with the single element at the pointy end.
 (|>) :: (Measured v a) => FingerTree v a -> a -> FingerTree v a
 Empty |> a = Single a
 Single a |> b = deep (One a) Empty (One b)
-Deep v pr m (Four a b c d) |> e =
-  m
-    `seq` Deep (v `mappend` measure e) pr (m |> node3 a b c) (Two d e)
-Deep v pr m sf |> x =
-  Deep (v `mappend` measure x) pr m (snocDigit sf x)
-
-snocDigit :: Digit a -> a -> Digit a
-snocDigit (One a) b       = Two a b
-snocDigit (Two a b) c     = Three a b c
-snocDigit (Three a b c) d = Four a b c d
-snocDigit Four {} _       = illegalArgument "snocDigit"
+Deep v pr m sf |> a = let wPr = Deep (v <> measure a) pr in case sf of
+  Four e d c b -> m `seq`  wPr (m |> node3 e d c) (Two b a)
+  Three d c b  -> wPr m (Four d c b a)
+  Two c b      -> wPr m (Three c b a)
+  One b        -> wPr m (Two b a)
 
 -- | /O(1)/. Is this the empty sequence?
 null :: FingerTree v a -> Bool
@@ -679,51 +674,33 @@ null _     = False
 
 -- | /O(1)/. Analyse the left end of a sequence.
 viewl :: (Measured v a) => FingerTree v a -> ViewL (FingerTree v) a
-viewl Empty                 = EmptyL
-viewl (Single x)            = x :< Empty
-viewl (Deep _ (One x) m sf) = x :< rotL m sf
-viewl (Deep _ pr m sf)      = lheadDigit pr :< deep (ltailDigit pr) m sf
+viewl Empty             = EmptyL
+viewl (Single x)        = x :< Empty
+viewl (Deep _ pr m sf)  = case pr of
+  One x        -> x :< rotL m sf
+  Two x y      -> x :<deep (One y) m sf
+  Three x y z  -> x :< deep (Two y z) m sf
+  Four x y z w -> x :< deep (Three y z w) m sf
 
 rotL :: (Measured v a) => FingerTree v (Node v a) -> Digit a -> FingerTree v a
 rotL m sf = case viewl m of
   EmptyL  -> digitToTree sf
   a :< m' -> Deep (measure m `mappend` measure sf) (nodeToDigit a) m' sf
 
-lheadDigit :: Digit a -> a
-lheadDigit (One a)        = a
-lheadDigit (Two a _)      = a
-lheadDigit (Three a _ _)  = a
-lheadDigit (Four a _ _ _) = a
-
-ltailDigit :: Digit a -> Digit a
-ltailDigit (One _)        = illegalArgument "ltailDigit"
-ltailDigit (Two _ b)      = One b
-ltailDigit (Three _ b c)  = Two b c
-ltailDigit (Four _ b c d) = Three b c d
-
 -- | /O(1)/. Analyse the right end of a sequence.
 viewr :: (Measured v a) => FingerTree v a -> ViewR (FingerTree v) a
-viewr Empty                 = EmptyR
-viewr (Single x)            = Empty :> x
-viewr (Deep _ pr m (One x)) = rotR pr m :> x
-viewr (Deep _ pr m sf)      = deep pr m (rtailDigit sf) :> rheadDigit sf
+viewr Empty             = EmptyR
+viewr (Single x)        = Empty :> x
+viewr (Deep _ pr m sf)  = case sf of
+  One x        -> rotR pr m :> x
+  Two x y      -> deep pr m (One x) :> y
+  Three x y z  -> deep pr m (Two x y) :> z
+  Four x y z w -> deep pr m (Three x y z) :> w
 
 rotR :: (Measured v a) => Digit a -> FingerTree v (Node v a) -> FingerTree v a
 rotR pr m = case viewr m of
   EmptyR  -> digitToTree pr
   m' :> a -> Deep (measure pr `mappend` measure m) pr m' (nodeToDigit a)
-
-rheadDigit :: Digit a -> a
-rheadDigit (One a)        = a
-rheadDigit (Two _ b)      = b
-rheadDigit (Three _ _ c)  = c
-rheadDigit (Four _ _ _ d) = d
-
-rtailDigit :: Digit a -> Digit a
-rtailDigit (One _)        = illegalArgument "rtailDigit"
-rtailDigit (Two a _)      = One a
-rtailDigit (Three a b _)  = Two a b
-rtailDigit (Four a b c _) = Three a b c
 
 digitToTree :: (Measured v a) => Digit a -> FingerTree v a
 digitToTree (One a)        = Single a

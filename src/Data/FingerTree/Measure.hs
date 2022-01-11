@@ -1,14 +1,18 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 
 module Data.FingerTree.Measure where
 
-import Control.DeepSeq (NFData)
-import Data.FingerTree (Measured (..))
-import GHC.Generics (Generic)
+import           Control.DeepSeq (NFData)
+import           Data.FingerTree (Measured (..))
+import           GHC.Generics    (Generic)
 
-newtype Value a = Value a deriving (Num, Eq, Ord, Real, Integral, Enum, Generic)
+newtype Value a = Value a deriving (
+    Eq, Ord,
+    Num,Real, Integral, Enum,
+    Show,Generic
+  )
 
 newtype Size = Size Int deriving (Num, Enum, Real, Integral, Eq, Ord, Show, Generic)
 
