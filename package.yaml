@@ -26,6 +26,11 @@ dependencies:
   - parsec
   - parser-combinators
   - deepseq
+  - array
+  - containers
+  - vector
+  - text
+  - bytestring
 
 library:
   source-dirs: src

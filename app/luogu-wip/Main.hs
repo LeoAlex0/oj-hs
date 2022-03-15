@@ -2,6 +2,6 @@
 
 module Main where
 
-import qualified Luogu.P1383
+import qualified Luogu.P3156 as W
 
-main = Luogu.P1383.main
+main = W.main
