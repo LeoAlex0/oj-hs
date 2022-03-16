@@ -54,7 +54,7 @@ instance Ord node => Monoid (EulerTourMonoid node) where
 instance Ord node => FT.Measured (EulerTourMonoid node) (EulerTourNode node) where
   measure (EulerTourNode node) = EulerTourMonoid (pure node) mempty (pure node) (S.singleton node) (pure 1)
 
-firstVertex :: MonadPlus m => Ord node => EulerTourMonoid node -> m node
+firstVertex :: (MonadPlus m, Ord node) => EulerTourMonoid node -> m node
 firstVertex (EulerTourMonoid first _ _ _ _) = maybe mzero pure $ M.getFirst first
 
 allNodes :: Ord node => EulerTourMonoid node -> S.Set node
@@ -97,7 +97,7 @@ singleton = EulerTourTree .FT.singleton .EulerTourNode
 -- >>> let tree = T.Node 1 [T.Node 2 [T.Node 4 []],T.Node 3 []]
 -- >>> FT.measure $ MB.fromJust $ fromTree tree
 -- (fromList [(1,2),(1,3),(2,4)],fromList [1,2,3,4],Sum {getSum = 7})
-fromTree :: MonadPlus m => Ord node => T.Tree node -> m (EulerTourTree node)
+fromTree :: (MonadPlus m, Ord node) => T.Tree node -> m (EulerTourTree node)
 fromTree tree = do
   guard $ allUnique $ F.toList tree
   pure $ EulerTourTree $ fromTree' tree
@@ -109,7 +109,7 @@ fromTree tree = do
 type Parser m node = (MonadPlus m, MS.MonadState (FT.FingerTree (EulerTourMonoid node) (EulerTourNode node)) m)
 
 -- | /O(n)/ Deconstruct an Euler tour tree into a 'Data.Tree'.
-toTree :: MonadPlus m => Ord node => EulerTourTree node -> m (T.Tree node)
+toTree :: (MonadPlus m, Ord node) => EulerTourTree node -> m (T.Tree node)
 toTree (EulerTourTree fingerTree) = MS.evalStateT parser fingerTree where
   parser = do
     EulerTourNode node <- anyToken
@@ -129,7 +129,7 @@ toTree (EulerTourTree fingerTree) = MS.evalStateT parser fingerTree where
     a <- MS.get
     f CAC.<|> (MS.put a >> mzero)
 
-root :: MonadPlus m => Ord node => EulerTourTree node -> m node
+root :: (MonadPlus m,Ord node) => EulerTourTree node -> m node
 root (EulerTourTree tree) = firstVertex $ FT.measure tree
 
 member :: Ord node => node -> EulerTourTree node -> Bool
@@ -141,8 +141,7 @@ size (EulerTourTree fingerTree) = tourSize $ FT.measure fingerTree
 -- | /O(log n)/ Return 2 subtrees of @tree@ where @a@ is the subtree of nodes __a__bove @edge@, and @b@ is the subtree of nodes __b__elow @edge@.
 --
 -- Fail if @edge@ isn't found in @tree@
-cutEdge :: MonadPlus m
-        => Ord node
+cutEdge :: (MonadPlus m, Ord node)
         => EulerTourTree node  -- ^ Denoted by @tree@
         -> (node, node)        -- ^ Denoted by @edge@
         -> m (EulerTourTree node, EulerTourTree node)  -- ^ Denoted by @(a, b)@
@@ -158,8 +157,7 @@ cutEdge (EulerTourTree tree) e@(a, b) = do
 -- | /O(log n)/ Attach @tree1@ as a child of @node@ in @tree2@.
 --
 -- Fail if @node@ isn't found in @tree2@, or if @tree1@ and @tree2@ have nodes in common.
-splice :: MonadPlus m
-       => Ord node
+splice :: (MonadPlus m, Ord node)
        => EulerTourTree node           -- ^ Denoted by @tree1@
        -> node                         -- ^ Denoted by @node@
        -> EulerTourTree node           -- ^ Denoted by @tree2@
@@ -175,8 +173,7 @@ splice (EulerTourTree inviteeTree) node (EulerTourTree hostTree) = do
 -- | /O(log n)/ Rotate @tree@ such that @node@ is the new root.
 --
 -- Fail if @node@ isn't found in @tree@.
-reroot :: MonadPlus m
-       => Ord node
+reroot :: (MonadPlus m, Ord node)
        => node                 -- ^ Denoted by @node@
        -> EulerTourTree node   -- ^ Denoted by @tree@
        -> m (EulerTourTree node)

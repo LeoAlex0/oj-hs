@@ -142,6 +142,7 @@ benchmark benchmark-prac-haskell-bench
   main-is: BenchMain.hs
   other-modules:
       Data.FingerTree.Bench
+      Data.SegTree.Bench
       Paths_oj_hs
   hs-source-dirs:
       bench
