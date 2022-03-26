@@ -12,7 +12,7 @@ import           Criterion.Main
 import           Data.Monoid
 import           Data.SegTree
 import           GHC.Generics    (Generic)
-import           System.Random   (Random (randomIO))
+import           System.Random   (Random (randomIO, randomRIO))
 
 deriving instance Random a => Random (Sum a)
 
@@ -23,27 +23,42 @@ instance Num a => Action (Plus a) (Sum a) where action (Plus x) (Sum s) = Sum (x
 
 type TestTree = SegTree (Plus Int) (Sum Int)
 
+testTree :: Int -> IO TestTree
+testTree n = fromList <$> replicateM n randomIO
+
 trees :: IO (TestTree,TestTree,TestTree)
-trees = do
-  raw_1e4 <- replicateM (10 ^ 4) randomIO
-  raw_1e5 <- replicateM (10 ^ 5) randomIO
-  raw_1e6 <- replicateM (10 ^ 6) randomIO
-  pure (fromList raw_1e4,fromList raw_1e5,fromList raw_1e6)
+trees = (,,) <$> testTree (10^4) <*> testTree (10^5) <*> testTree (10^6)
+
+randomQuery :: TestTree -> IO (Sum Int)
+randomQuery tree = do
+  let len = size tree
+  [s1,s2] <- replicateM 2 $ randomRIO (0,len-1)
+  pure $ query (min s1 s2) (max s1 s2) tree
+
+randomApply :: TestTree -> IO TestTree
+randomApply tree = do
+  [s1,s2] <- replicateM 2 $ randomRIO (0,size tree-1)
+  apply <$> (Plus <$> randomIO) <*> pure (min s1 s2) <*> pure (max s1 s2) <*> pure tree
 
 -- Our benchmark harness.
-benchST = env trees $ \ ~(tree_1e4, tree_1e5, tree_1e6) ->
-  bgroup
+benchST = env trees $ \ ~(tree_1e4, tree_1e5, tree_1e6) -> bgroup
     "SegTree"
-    [ bgroup
+    [
+      bgroup "Build" [
+        bench "1e4" $ nfAppIO testTree (10^4),
+        bench "1e5" $ nfAppIO testTree (10^5),
+        bench "1e6" $ nfAppIO testTree (10^6)
+      ],
+      bgroup
         "Query"
-        [ bench "1e4" $ whnf (query (3*10^3) (6*10^3)) tree_1e4,
-          bench "1e5" $ whnf (query (3*10^4) (6*10^4)) tree_1e5,
-          bench "1e6" $ whnf (query (3*10^5) (6*10^5)) tree_1e6
+        [ bench "1e4" $ nfAppIO randomQuery tree_1e4,
+          bench "1e5" $ nfAppIO randomQuery tree_1e5,
+          bench "1e6" $ nfAppIO randomQuery tree_1e6
         ],
       bgroup
         "Apply"
-        [ bench "1e4 <> 1e4" $ whnf (apply (Plus 1) (3*10^3) (6*10^3)) tree_1e4,
-          bench "1e5 <> 1e5" $ whnf (apply (Plus 1) (3*10^4) (6*10^4)) tree_1e5,
-          bench "1e6 <> 1e6" $ whnf (apply (Plus 1) (3*10^5) (6*10^5)) tree_1e6
+        [ bench "1e4" $ whnfAppIO randomApply tree_1e4,
+          bench "1e5" $ whnfAppIO randomApply tree_1e5,
+          bench "1e6" $ whnfAppIO randomApply tree_1e6
         ]
     ]
