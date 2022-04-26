@@ -25,14 +25,17 @@ source-repository head
 
 library
   exposed-modules:
-      Codeforces.P1302C
+      Algorithm.Text.KMP
+      Algorithm.Text.SuffixAutomaton
+      Data.Automaton
       Data.EulerTourTree
       Data.FingerTree
       Data.FingerTree.Measure
       Data.SegTree
       Lib
-      Luogu.P1383
-      Luogu.P3156
+      Solution.Codeforces.P1302C
+      Solution.Luogu.P1383
+      Solution.Luogu.P3156
   other-modules:
       Paths_oj_hs
   hs-source-dirs:
