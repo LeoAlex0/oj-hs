@@ -14,7 +14,7 @@ data Automaton tok = Automaton {
   piF :: V.Vector Int
 }
 
-deriving instance (Eq tok,Show tok) => Show (Automaton tok)
+deriving instance (Show tok) => Show (Automaton tok)
 
 -- ^compile use O(|tok|) time to compile an KMP automaton
 compile :: (Eq tok) => V.Vector tok -> Automaton tok
