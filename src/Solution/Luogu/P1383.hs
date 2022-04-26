@@ -1,4 +1,4 @@
-module Luogu.P1383 where
+module Solution.Luogu.P1383 where
 
 import Control.Monad (foldM_)
 import Data.FingerTree

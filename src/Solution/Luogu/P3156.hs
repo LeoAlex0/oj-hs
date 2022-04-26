@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -O2 #-}
 
-module Luogu.P3156 where
+module Solution.Luogu.P3156 where
 
 import           Data.Array.Unboxed (UArray, listArray, (!))
 import           Data.Either        (fromRight)
