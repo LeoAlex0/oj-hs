@@ -31,6 +31,7 @@ dependencies:
   - vector
   - text
   - bytestring
+  - unordered-containers
 
 library:
   source-dirs: src

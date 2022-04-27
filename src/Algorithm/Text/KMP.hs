@@ -9,10 +9,11 @@ import qualified Data.Vector         as V
 import           Data.Vector.Generic as VG
 import           Prelude             as P
 
-data Automaton tok = Automaton {
-  pat :: V.Vector tok,
-  piF :: V.Vector Int
-}
+data Automaton tok
+  = Automaton
+      { pat :: V.Vector tok
+      , piF :: V.Vector Int
+      }
 
 deriving instance (Show tok) => Show (Automaton tok)
 
@@ -35,7 +36,7 @@ instance (Eq tok) => A.Automaton (Automaton tok) where
   step a@(Automaton pat piF) c = step' where
     accept = A.isAccept a
     step' s
-      | accept s = if s == 0 then 0 else step' (piF!(s-1))
+      | accept s   = if s == 0 then 0 else step' (piF!(s-1))
       | pat!s == c = s+1
       | s == 0     = 0
       | otherwise  = step' (piF!s)
