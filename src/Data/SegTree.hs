@@ -13,7 +13,7 @@ class Action a v | v -> a where
 data SegTree a v
   = Leaf v
   | Branch Int a v !(SegTree a v) !(SegTree a v)
-  deriving (Show,Generic)
+  deriving (Generic, Show)
 
 instance (NFData a,NFData v) => NFData (SegTree a v)
 

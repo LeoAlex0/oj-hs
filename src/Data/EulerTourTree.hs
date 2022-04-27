@@ -32,12 +32,14 @@ tailSafe tree = case FT.viewl tree of
   _ FT.:< tail -> tail
   _            -> tree
 
-newtype EulerTourNode node = EulerTourNode node
+newtype EulerTourNode node
+  = EulerTourNode node
 deriving instance (Eq node) => Eq (EulerTourNode node)
 deriving instance (Ord node) => Ord (EulerTourNode node)
 deriving instance (Show node) => Show (EulerTourNode node)
 
-data EulerTourMonoid node = EulerTourMonoid (M.First node) (S.Set (node,node)) (M.Last node) (S.Set node) (M.Sum Int)
+data EulerTourMonoid node
+  = EulerTourMonoid (M.First node) (S.Set (node, node)) (M.Last node) (S.Set node) (M.Sum Int)
 deriving instance Show node => Show (EulerTourMonoid node)
 
 instance Ord node => Semigroup (EulerTourMonoid node) where

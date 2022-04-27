@@ -1,10 +1,10 @@
 module Solution.Luogu.P1383 where
 
-import Control.Monad (foldM_)
-import Data.FingerTree
-import Data.FingerTree.Measure
-import Data.Functor (($>))
-import Text.Printf (printf)
+import           Control.Monad           (foldM_)
+import           Data.FingerTree
+import           Data.FingerTree.Measure
+import           Data.Functor            (($>))
+import           Text.Printf             (printf)
 
 type Rope = FingerTree Size (Value Char)
 

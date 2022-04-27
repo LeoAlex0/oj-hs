@@ -105,32 +105,20 @@ infixl 5 |>, :>
 
 -- | View of the left end of a sequence.
 data ViewL s a
-  = -- | empty sequence
-    EmptyL
-  | -- | leftmost element and the rest of the sequence
-    a :< s a
-  deriving
-    ( Eq,
-      Ord,
-      Show,
-      Read,
-      Generic
-    )
+  -- | empty sequence
+  = EmptyL
+  -- | leftmost element and the rest of the sequence
+  | a :< s a
+  deriving (Eq, Generic, Ord, Read, Show)
 
 -- | View of the right end of a sequence.
 data ViewR s a
-  = -- | empty sequence
-    EmptyR
-  | -- | the sequence minus the rightmost element,
-    -- and the rightmost element
-    s a :> a
-  deriving
-    ( Eq,
-      Ord,
-      Show,
-      Read,
-      Generic
-    )
+  -- | empty sequence
+  = EmptyR
+  -- | the sequence minus the rightmost element,
+  -- and the rightmost element
+  | s a :> a
+  deriving (Eq, Generic, Ord, Read, Show)
 
 instance (Functor s) => Functor (ViewL s) where
   fmap _ EmptyL    = EmptyL
@@ -155,10 +143,7 @@ data Digit a
   | Two a a
   | Three a a a
   | Four a a a a
-  deriving
-    ( Show,
-      Generic
-    )
+  deriving (Generic, Show)
 
 instance (NFData a) => NFData (Digit a)
 
@@ -183,11 +168,10 @@ instance (Measured v a) => Measured v (Digit a) where
 -- 4.2 Caching measurements
 ---------------------------
 
-data Node v a = Node2 !v a a | Node3 !v a a a
-  deriving
-    ( Show,
-      Generic
-    )
+data Node v a
+  = Node2 !v a a
+  | Node3 !v a a a
+  deriving (Generic, Show)
 
 instance (NFData v, NFData a) => NFData (Node v a)
 
@@ -955,25 +939,20 @@ addDigits4 m1 (Four a b c d) e f g h (Four i j k l) m2 =
 --
 -- @since 0.1.2.0
 data SearchResult v a
-  = -- | A tree opened at a particular element: the prefix to the
-    -- left, the element, and the suffix to the right.
-    Position (FingerTree v a) a (FingerTree v a)
-  | -- | A position to the left of the sequence, indicating that the
-    -- predicate is 'True' at both ends.
-    OnLeft
-  | -- | A position to the right of the sequence, indicating that the
-    -- predicate is 'False' at both ends.
-    OnRight
-  | -- | No position in the tree, returned if the predicate is 'True'
-    -- at the left end and 'False' at the right end.  This will not
-    -- occur if the predicate in monotonic on the tree.
-    Nowhere
-  deriving
-    ( Eq,
-      Ord,
-      Show,
-      Generic
-    )
+  -- | A tree opened at a particular element: the prefix to the
+  -- left, the element, and the suffix to the right.
+  = Position (FingerTree v a) a (FingerTree v a)
+  -- | A position to the left of the sequence, indicating that the
+  -- predicate is 'True' at both ends.
+  | OnLeft
+  -- | A position to the right of the sequence, indicating that the
+  -- predicate is 'False' at both ends.
+  | OnRight
+  -- | No position in the tree, returned if the predicate is 'True'
+  -- at the left end and 'False' at the right end.  This will not
+  -- occur if the predicate in monotonic on the tree.
+  | Nowhere
+  deriving (Eq, Generic, Ord, Show)
 
 -- | /O(log(min(i,n-i)))/. Search a sequence for a point where a predicate
 -- on splits of the sequence changes from 'False' to 'True'.
@@ -1149,7 +1128,8 @@ takeUntil p = fst . split p
 dropUntil :: (Measured v a) => (v -> Bool) -> FingerTree v a -> FingerTree v a
 dropUntil p = snd . split p
 
-data Split t a = Split t a t
+data Split t a
+  = Split t a t
 
 splitTree ::
   (Measured v a) =>

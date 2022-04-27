@@ -16,7 +16,9 @@ import           System.Random   (Random (randomIO, randomRIO))
 
 deriving instance Random a => Random (Sum a)
 
-newtype Plus a = Plus a deriving (Show,NFData)
+newtype Plus a
+  = Plus a
+  deriving (NFData, Show)
 instance Num a => Semigroup (Plus a) where (Plus a) <> (Plus b) = Plus (a+b)
 instance Num a => Monoid (Plus a) where mempty = Plus 0
 instance Num a => Action (Plus a) (Sum a) where action (Plus x) (Sum s) = Sum (x+s)

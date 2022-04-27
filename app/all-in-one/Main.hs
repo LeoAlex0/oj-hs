@@ -1,14 +1,14 @@
 module Main where
 
-import Data.Char
-import Data.Generics
-import Data.Hashable
-import Data.List
-import Data.Traversable
-import Debug.Trace
-import Language.Haskell.Exts
-import Language.Haskell.Names
-import System.Environment
+import           Data.Char
+import           Data.Generics
+import           Data.Hashable
+import           Data.List
+import           Data.Traversable
+import           Debug.Trace
+import           Language.Haskell.Exts
+import           Language.Haskell.Names
+import           System.Environment
 
 main :: IO ()
 main = do
@@ -81,24 +81,24 @@ renameName ours we n
 
 modOf :: String -> Scoped () -> Maybe String
 modOf we (Scoped (GlobalSymbol s _) _) = Just $ getName' (symbolModule s)
-modOf we (Scoped ValueBinder _) = Just we
-modOf we (Scoped (LocalValue _) _) = Just we
-modOf we _ = Nothing
+modOf we (Scoped ValueBinder _)        = Just we
+modOf we (Scoped (LocalValue _) _)     = Just we
+modOf we _                             = Nothing
 
 doubleUS = concatMap go
   where
     go '_' = "__"
-    go c = [c]
+    go c   = [c]
 
 doubleCol = concatMap go
   where
     go ':' = "::"
-    go c = [c]
+    go c   = [c]
 
 dotToUS = concatMap go
   where
     go '.' = "_"
-    go c = [c]
+    go c   = [c]
 
 toSymbol :: Int -> String
 toSymbol = map ((("⚛☃⚾♛♬☏⚒☸☀☮☘☭∞∃" !!) . subtract (ord '0')) . ord) . show

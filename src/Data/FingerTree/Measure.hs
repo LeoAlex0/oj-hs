@@ -8,13 +8,13 @@ import           Control.DeepSeq (NFData)
 import           Data.FingerTree (Measured (..))
 import           GHC.Generics    (Generic)
 
-newtype Value a = Value a deriving (
-    Eq, Ord,
-    Num,Real, Integral, Enum,
-    Show,Generic
-  )
+newtype Value a
+  = Value a
+  deriving (Enum, Eq, Generic, Integral, Num, Ord, Real, Show)
 
-newtype Size = Size Int deriving (Num, Enum, Real, Integral, Eq, Ord, Show, Generic)
+newtype Size
+  = Size Int
+  deriving (Enum, Eq, Generic, Integral, Num, Ord, Real, Show)
 
 instance Semigroup Size where
   (<>) = (+)
