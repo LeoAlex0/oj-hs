@@ -48,6 +48,7 @@ library
     , bytestring
     , containers
     , deepseq
+    , hashable
     , mtl
     , parsec
     , parser-combinators
@@ -93,6 +94,7 @@ executable codeforces-wip
     , bytestring
     , containers
     , deepseq
+    , hashable
     , mtl
     , oj-hs
     , parsec
@@ -114,6 +116,7 @@ executable luogu-wip
     , bytestring
     , containers
     , deepseq
+    , hashable
     , mtl
     , oj-hs
     , parsec
@@ -127,6 +130,7 @@ test-suite oj-hs-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Data.Trie
       Paths_oj_hs
   hs-source-dirs:
       test
@@ -137,10 +141,12 @@ test-suite oj-hs-test
     , bytestring
     , containers
     , deepseq
+    , hashable
     , mtl
     , oj-hs
     , parsec
     , parser-combinators
+    , quickcheck
     , text
     , unordered-containers
     , vector
@@ -163,6 +169,7 @@ benchmark benchmark-prac-haskell-bench
     , containers
     , criterion
     , deepseq
+    , hashable
     , mtl
     , oj-hs
     , parsec
