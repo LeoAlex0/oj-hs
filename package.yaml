@@ -73,7 +73,11 @@ tests:
       - -with-rtsopts=-N
     dependencies:
       - oj-hs
-      - quickcheck
+      - QuickCheck
+      - hspec
+      - hspec-contrib
+      - QuickCheck
+      - HUnit
 
 benchmarks:
   benchmark-prac-haskell-bench:

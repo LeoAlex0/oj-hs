@@ -1,7 +1,5 @@
 {-# OPTIONS_GHC -O2 #-}
 
-module Main where
+module Main (P.main) where
 
-import qualified Luogu.P1383
-
-main = Luogu.P1383.main
+import           Solution.Luogu.P1383 as P (main)
