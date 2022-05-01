@@ -30,9 +30,9 @@ spec = describe "Algorithm.KMP" $ do
       (prefix.V.fromList) "" `shouldBe` [0]
       (prefix.V.fromList) "aabaaab" `shouldBe` [0,1,0,1,2,2,3]
     prop "prefix function must meet the define: case [0]" $
-      \str -> within (10^3) $ prefix @Char str!0 === 0
+      \str -> within (10^6) $ prefix @Char str!0 === 0
     prop "prefix function must meet the define:" $
-      \str -> within (10^3) $ (not.V.null) str ==> forAll (choose (0,V.length str-1)) $ \i -> let
+      \str -> within (10^6) $ (not.V.null) str ==> forAll (choose (0,V.length str-1)) $ \i -> let
           pI = (prefix @Char str!i)
           pred k = [str!j|j<-[0..k-1]]==[str!j|j<-[i-(k-1)..i]]
         in pred pI .&&. (pI<i ==> forAll (choose (pI+1,i)) (not.pred))
@@ -47,7 +47,7 @@ spec = describe "Algorithm.KMP" $ do
       match "ababc" `shouldBe` False
     prop "can accpet any suffix" $
       \(PrintableString str1) (PrintableString str2) -> let auto = (compile.V.fromList) str1 in
-        (within (10^4).isAccept auto.run auto) (str2<>str1)
+        (within (10^6).isAccept auto.run auto) (str2<>str1)
     prop "deny if not a suffix" $
       \(PrintableString str1) (PrintableString str2) -> let auto = (compile.V.fromList) str1 in
-        within (10^4) $ not (str1 `isSuffixOf` str2) ==> (not.isAccept auto.run auto) str2
+        within (10^6) $ not (str1 `isSuffixOf` str2) ==> (not.isAccept auto.run auto) str2

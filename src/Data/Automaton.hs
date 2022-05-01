@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 module Data.Automaton where
+import           Data.Foldable (Foldable (foldl'))
 
 class Automaton (a :: *) where
     type family State a
@@ -8,9 +9,10 @@ class Automaton (a :: *) where
     initialState :: a-> State a
     step :: a -> Token a -> State a -> State a
 
-run' :: (Automaton a) => a -> [Token a] -> State a -> State a
-run' _ []     = id
-run' a (t:ts) = run' a ts.step a t
+-- | run an automaton from a customized start state
+runFrom :: (Automaton a) => a -> [Token a] -> State a -> State a
+runFrom a ts initial = foldl' (flip (step a)) initial ts
 
+-- | run an automaton from automaton's initial state
 run :: (Automaton a) => a -> [Token a] -> State a
-run a ts = run' a ts (initialState a)
+run a ts = runFrom a ts (initialState a)
