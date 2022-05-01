@@ -46,4 +46,4 @@ instance (Eq tok) => A.Automaton (Automaton tok) where
       | accept s   = if s == 0 then 0 else step' (piF!(s-1))
       | pat!s == c = s+1
       | s == 0     = 0
-      | otherwise  = step' (piF!s)
+      | otherwise  = step' (piF!(s-1))

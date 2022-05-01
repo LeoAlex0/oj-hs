@@ -1,17 +1,22 @@
+{-# LANGUAGE OverloadedLists  #-}
 {-# LANGUAGE TypeApplications #-}
 module Algorithm.KMP.Hspec where
 import           Algorithm.Text.KMP        (compile, prefix)
 import           Data.Automaton            (Automaton (isAccept), run)
 import           Data.List                 (isSuffixOf)
-import           Data.Vector               as V (Vector, fromList, length,
+import           Data.Vector               as V (Vector, fromList, length, null,
                                                  toList, (!))
-import           Test.Hspec                (Spec, describe)
+import           Test.HUnit                ((@?=))
+import           Test.Hspec                (Spec, describe, it, shouldBe)
 import           Test.Hspec.QuickCheck     (prop)
-import           Test.QuickCheck           (Arbitrary (arbitrary),
-                                            Args (maxSize), choose, disjoin,
-                                            expectFailure, forAll, getSize,
-                                            vector, within, (.&&.), (===),
-                                            (==>))
+import           Test.QuickCheck           (ASCIIString (ASCIIString),
+                                            Arbitrary (arbitrary),
+                                            Args (maxSize),
+                                            NonNegative (NonNegative),
+                                            PrintableString (PrintableString),
+                                            choose, disjoin, expectFailure,
+                                            forAll, getSize, vector, within,
+                                            (.&&.), (===), (==>))
 import           Test.QuickCheck.Modifiers (Positive (Positive))
 
 
@@ -20,20 +25,29 @@ instance Arbitrary a => Arbitrary (V.Vector a) where
 
 spec:: Spec
 spec = describe "Algorithm.KMP" $ do
-  -- Prefix function
-  prop "prefix function must meet the define: case [0]" $
-    \str -> within (10^3) $ prefix @Char str!0 === 0
-  prop "prefix function must meet the define:" $
-    \str (Positive i) -> let
-      pI = (prefix @Char str!i)
-      pred k = [str!j|j<-[0..k-1]]==[str!j|j<-[i-(k-1)..i]]
-      in
-        within (10^3) $ i < V.length str ==> pred pI .&&. forAll (choose (pI+1,i)) (not.pred)
+  describe "prefix function"$ do
+    it "simple test case" $ do
+      (prefix.V.fromList) "" `shouldBe` [0]
+      (prefix.V.fromList) "aabaaab" `shouldBe` [0,1,0,1,2,2,3]
+    prop "prefix function must meet the define: case [0]" $
+      \str -> within (10^3) $ prefix @Char str!0 === 0
+    prop "prefix function must meet the define:" $
+      \str -> within (10^3) $ (not.V.null) str ==> forAll (choose (0,V.length str-1)) $ \i -> let
+          pI = (prefix @Char str!i)
+          pred k = [str!j|j<-[0..k-1]]==[str!j|j<-[i-(k-1)..i]]
+        in pred pI .&&. (pI<i ==> forAll (choose (pI+1,i)) (not.pred))
 
-  -- Automaton
-  prop "KMP automaton can accpet any suffix" $
-    \str1 str2 -> let auto = compile @Char str1 in
-      (isAccept auto.run auto.V.toList) (str2<>str1)
-  prop "KMP automaton deny if not a suffix" $
-    \str1 str2 -> let auto = compile @Char str1 in
-      not (V.toList str1 `isSuffixOf` V.toList str2) ==> (not.isAccept auto.run auto.V.toList) str2
+  describe "KMP automaton" $ do
+    it "simple test case" $ do
+      let auto = (compile.V.fromList) "aba"
+          match = isAccept auto.run auto
+      match "ab" `shouldBe` False
+      match "aba" `shouldBe` True
+      match "ababa" `shouldBe` True
+      match "ababc" `shouldBe` False
+    prop "can accpet any suffix" $
+      \(PrintableString str1) (PrintableString str2) -> let auto = (compile.V.fromList) str1 in
+        (within (10^4).isAccept auto.run auto) (str2<>str1)
+    prop "deny if not a suffix" $
+      \(PrintableString str1) (PrintableString str2) -> let auto = (compile.V.fromList) str1 in
+        within (10^4) $ not (str1 `isSuffixOf` str2) ==> (not.isAccept auto.run auto) str2
