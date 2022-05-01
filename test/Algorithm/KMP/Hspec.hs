@@ -1,5 +1,6 @@
-{-# LANGUAGE OverloadedLists  #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE OverloadedLists     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 module Algorithm.KMP.Hspec where
 import           Algorithm.Text.KMP        (compile, prefix)
 import           Data.Automaton            (Automaton (isAccept), run)
@@ -51,3 +52,9 @@ spec = describe "Algorithm.KMP" $ do
     prop "deny if not a suffix" $
       \(PrintableString str1) (PrintableString str2) -> let auto = (compile.V.fromList) str1 in
         within (10^6) $ not (str1 `isSuffixOf` str2) ==> (not.isAccept auto.run auto) str2
+    prop "can used in binary string" $
+      \(str1 :: [Bool]) str2 -> let auto = (compile.V.fromList) str1 in
+        (within (10^4).isAccept auto.run auto) (str2<>str1)
+    prop "and deny if not a binary suffix" $
+      \(str1 :: [Bool]) str2 -> let auto = (compile.V.fromList) str1 in
+        within (10^4) $ not (str1 `isSuffixOf` str2) ==> (not.isAccept auto.run auto) str2
