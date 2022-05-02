@@ -3,16 +3,11 @@ module Algorithm.Text.KMP where
 
 import qualified Data.Automaton      as A
 import           Data.List.NonEmpty  as NE
+import qualified Data.Map            as M
+import           Data.Maybe          (fromMaybe)
 import qualified Data.Vector         as V
 import           Data.Vector.Generic as VG
 import           Prelude             as P
-
-data Automaton tok
-  = Automaton
-      { pat :: V.Vector tok
-      , piF :: V.Vector Int
-      }
-  deriving (Show)
 
 -- | prefix function of a string, which means:
 --
@@ -25,24 +20,32 @@ data Automaton tok
 prefix :: (Eq tok) => V.Vector tok -> V.Vector Int
 prefix toks = piF where
   piF = V.fromList $ 0:[findP (toks!k) $ piF!(k-1) | k<-[1..VG.length toks-1]]
-  findP c 0 = if toks!0 == c then 1 else 0
-  findP c j = if toks!j == c
-    then j+1
-    else findP c $ piF!(j-1)
+  findP c j
+    | toks!j == c = j+1
+    | j==0        = 0
+    | otherwise   = findP c $ piF!(j-1)
+
+newtype Automaton tok
+  = Automaton { next :: V.Vector (M.Map tok Int) }
+  deriving (Show)
+
+-- | state of KMP automaton
+newtype S
+  = S Int
 
 -- | compile use O(|tok|) time to compile an KMP automaton
-compile :: (Eq tok) => V.Vector tok -> Automaton tok
-compile toks = Automaton toks (prefix toks)
+compile :: (Eq tok,Ord tok) => V.Vector tok -> Automaton tok
+compile pat = Automaton next where
+  piF = prefix pat
+  n = VG.length pat
+  next = V.fromList $ step <$> [0..n]
+  step s = M.fromDistinctAscList [(pat!s,s+1)|s/=n] `M.union`
+    if s/=0 then next!(piF!(s-1)) else M.empty
 
-instance (Eq tok) => A.Automaton (Automaton tok) where
-  type instance State (Automaton tok) = Int
+instance (Eq tok,Ord tok) => A.Automaton (Automaton tok) where
+  type instance State (Automaton tok) = S
   type instance Token (Automaton tok) = tok
 
-  isAccept a = (== (VG.length.pat) a)
-  initialState _ = 0
-  step a@(Automaton pat piF) c = step' where
-    accept = A.isAccept a
-    step' s
-      | (not.accept) s && pat!s == c = s+1
-      | s == 0                       = 0
-      | otherwise                    = step' (piF!(s-1))
+  isAccept (Automaton next) (S s) = s+1 == V.length next
+  initialState _ = S 0
+  step (Automaton next) c (S s) = S .fromMaybe 0 $ M.lookup c (next!s)
