@@ -4,7 +4,9 @@
 module Algorithm.KMP.Hspec where
 import           Algorithm.Text.KMP        (compile, prefix)
 import           Data.Automaton            (Automaton (isAccept), run)
-import           Data.List                 (isSuffixOf)
+import qualified Data.ByteString           as BS (isSuffixOf, unpack)
+import           Data.List                 as L (isSuffixOf)
+import           Data.String               (IsString (..))
 import           Data.Vector               as V (Vector, fromList, length, null,
                                                  toList, (!))
 import           Test.HUnit                ((@?=))
@@ -47,14 +49,18 @@ spec = describe "Algorithm.KMP" $ do
       match "ababa" `shouldBe` True
       match "ababc" `shouldBe` False
     prop "can accpet any suffix" $
-      \(PrintableString str1) (PrintableString str2) -> let auto = (compile.V.fromList) str1 in
-        (within (10^6).isAccept auto.run auto) (str2<>str1)
+      \(PrintableString str1) (PrintableString str2) -> let
+        s1:[s2] = fromString <$> [str1,str2]
+        auto = (compile.V.fromList.BS.unpack) s1
+        in (within (10^6).isAccept auto.run auto.BS.unpack) (s2<>s1)
     prop "deny if not a suffix" $
-      \(PrintableString str1) (PrintableString str2) -> let auto = (compile.V.fromList) str1 in
-        within (10^6) $ not (str1 `isSuffixOf` str2) ==> (not.isAccept auto.run auto) str2
+      \(PrintableString str1) (PrintableString str2) -> let
+        s1:[s2] = fromString <$> [str1,str2]
+        auto = (compile.V.fromList.BS.unpack) s1
+        in within (10^6) $ not (s1 `BS.isSuffixOf` s2) ==> (not.isAccept auto.run auto.BS.unpack) s2
     prop "can used in binary string" $
       \(str1 :: [Bool]) str2 -> let auto = (compile.V.fromList) str1 in
         (within (10^4).isAccept auto.run auto) (str2<>str1)
     prop "and deny if not a binary suffix" $
       \(str1 :: [Bool]) str2 -> let auto = (compile.V.fromList) str1 in
-        within (10^4) $ not (str1 `isSuffixOf` str2) ==> (not.isAccept auto.run auto) str2
+        within (10^4) $ not (str1 `L.isSuffixOf` str2) ==> (not.isAccept auto.run auto) str2
