@@ -43,7 +43,6 @@ instance (Eq tok) => A.Automaton (Automaton tok) where
   step a@(Automaton pat piF) c = step' where
     accept = A.isAccept a
     step' s
-      | accept s   = if s == 0 then 0 else step' (piF!(s-1))
-      | pat!s == c = s+1
-      | s == 0     = 0
-      | otherwise  = step' (piF!(s-1))
+      | (not.accept) s && pat!s == c = s+1
+      | s == 0                       = 0
+      | otherwise                    = step' (piF!(s-1))
