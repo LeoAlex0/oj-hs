@@ -42,7 +42,7 @@ spec = describe "Algorithm.KMP" $ do
 
   describe "KMP automaton" $ do
     it "simple test case" $ do
-      let auto = (compile.V.fromList) "aba"
+      let auto = compile "aba"
           match = isAccept auto.run auto
       match "ab" `shouldBe` False
       match "aba" `shouldBe` True
@@ -51,16 +51,16 @@ spec = describe "Algorithm.KMP" $ do
     prop "can accpet any suffix" $
       \(PrintableString str1) (PrintableString str2) -> let
         s1:[s2] = fromString <$> [str1,str2]
-        auto = (compile.V.fromList.BS.unpack) s1
+        auto = (compile.BS.unpack) s1
         in (within (10^6).isAccept auto.run auto.BS.unpack) (s2<>s1)
     prop "deny if not a suffix" $
       \(PrintableString str1) (PrintableString str2) -> let
         s1:[s2] = fromString <$> [str1,str2]
-        auto = (compile.V.fromList.BS.unpack) s1
+        auto = (compile.BS.unpack) s1
         in within (10^6) $ not (s1 `BS.isSuffixOf` s2) ==> (not.isAccept auto.run auto.BS.unpack) s2
     prop "can used in binary string" $
-      \(str1 :: [Bool]) str2 -> let auto = (compile.V.fromList) str1 in
+      \(str1 :: [Bool]) str2 -> let auto = compile str1 in
         (within (10^4).isAccept auto.run auto) (str2<>str1)
     prop "and deny if not a binary suffix" $
-      \(str1 :: [Bool]) str2 -> let auto = (compile.V.fromList) str1 in
+      \(str1 :: [Bool]) str2 -> let auto = compile str1 in
         within (10^4) $ not (str1 `L.isSuffixOf` str2) ==> (not.isAccept auto.run auto) str2

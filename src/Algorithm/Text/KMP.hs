@@ -34,23 +34,18 @@ newtype S
   = S Int
 
 -- | compile use O(|tok|) time to compile an KMP automaton
-compile :: (Eq tok,Ord tok) => V.Vector tok -> Automaton tok
+compile :: (Eq tok,Ord tok) => [tok] -> Automaton tok
 compile pat
-  | VG.null pat = Automaton (V.singleton M.empty) -- for null-pattern
+  | L.null pat = Automaton (V.singleton M.empty) -- for null-pattern
   | otherwise   = Automaton next
   where
-    n      = VG.length pat
-    next   = V.fromList $ snd <$> L.scanl' step (0,goNext 0) [1..n] -- non-empty here
+    next   = V.fromList ((snd <$> trace) <> [next!P.fst (L.last trace)])
+    trace = L.scanl' step (0,goNext (0,L.head pat)) ([1..] `L.zip` L.tail pat)  -- non-empty here
     go s c = fromMaybe 0 $ next!s M.!? c
 
     -- | state transfer table (goto next, pat!s must exist)
-    goNext s = M.singleton (pat!s) (s+1)
-    step (patState,_) s
-      | s == n    = (patState',fallback)
-      | otherwise = (patState',goNext s `M.union` fallback)
-      where
-        fallback   = next!patState       -- state transfer table (fallback to other state)
-        patState'  = go patState (pat!s)
+    goNext (s,c) = M.singleton c (s+1)
+    step (patState,_) ss@(s,c) = (go patState c,goNext ss `M.union` (next!patState))
 
 instance (Eq tok,Ord tok) => A.Automaton (Automaton tok) where
   type instance State (Automaton tok) = S
