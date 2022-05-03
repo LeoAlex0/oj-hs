@@ -38,9 +38,16 @@ compile :: (Eq tok,Ord tok) => V.Vector tok -> Automaton tok
 compile pat = Automaton next where
   piF = prefix pat
   n = VG.length pat
-  next = V.fromList $ step <$> [0..n]
-  step s = M.fromDistinctAscList [(pat!s,s+1)|s/=n] `M.union`
-    if s/=0 then next!(piF!(s-1)) else M.empty
+  next
+    | n == 0    = V.singleton M.empty
+    | otherwise = V.fromList $ step <$> [0..n] -- non-empty
+  step s
+    | s == 0    = goNext
+    | s == n    = fallback
+    | otherwise = goNext `M.union` fallback
+    where
+      goNext   = M.singleton (pat!s) (s+1)
+      fallback = next!(piF!(s-1))
 
 instance (Eq tok,Ord tok) => A.Automaton (Automaton tok) where
   type instance State (Automaton tok) = S
