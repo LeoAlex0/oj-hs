@@ -35,22 +35,22 @@ newtype S
 
 -- | compile use O(|tok|) time to compile an KMP automaton
 compile :: (Eq tok,Ord tok) => [tok] -> Automaton tok
-compile pat
-  | L.null pat = Automaton (V.singleton M.empty) -- for null-pattern
-  | otherwise   = Automaton next
+compile pat = Automaton next
   where
-    next   = V.fromList ((snd <$> trace) <> [next!P.fst (L.last trace)])
-    trace = L.scanl' step (0,goNext (0,L.head pat)) ([1..] `L.zip` L.tail pat)  -- non-empty here
-    go s c = fromMaybe 0 $ next!s M.!? c
+    next = V.fromList $ hgoto:L.zipWith M.union gotos fallbacks
 
+    hgoto:gotos = L.zipWith goNext [0..] pat <> [M.empty]
+    fallbacks    = (next!) <$> piF
+
+    piF     = L.scanl run 0 (L.tail pat) -- prefix function , which equals `prefix pat`
+    run s c = fromMaybe 0 $ next!s M.!? c
     -- | state transfer table (goto next, pat!s must exist)
-    goNext (s,c) = M.singleton c (s+1)
-    step (patState,_) ss@(s,c) = (go patState c,goNext ss `M.union` (next!patState))
+    goNext s c = M.singleton c (s+1)
 
 instance (Eq tok,Ord tok) => A.Automaton (Automaton tok) where
   type instance State (Automaton tok) = S
   type instance Token (Automaton tok) = tok
 
-  isAccept (Automaton next) (S s) = s+1 == V.length next
+  isAccept Automaton {next=n} (S s) = s+1 == V.length n
   initialState _ = S 0
-  step (Automaton next) c (S s) = S .fromMaybe 0 $ M.lookup c (next!s)
+  step Automaton {next=n} c (S s) = S .fromMaybe 0 $ M.lookup c (n!s)
