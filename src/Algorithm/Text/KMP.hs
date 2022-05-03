@@ -40,7 +40,7 @@ compile pat = Automaton next
     next = V.fromList $ hgoto:L.zipWith M.union gotos fallbacks
 
     hgoto:gotos = L.zipWith goNext [0..] pat <> [M.empty]
-    fallbacks    = (next!) <$> piF
+    fallbacks   = (next!) <$> piF
 
     piF     = L.scanl run 0 (L.tail pat) -- prefix function , which equals `prefix pat`
     run s c = fromMaybe 0 $ next!s M.!? c
