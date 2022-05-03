@@ -1,8 +1,8 @@
 {-# LANGUAGE TypeFamilies #-}
-module Algorithm.Text.KMP where
+module Algorithm.Text.KMP(prefix,compile,Automaton) where
 
 import qualified Data.Automaton      as A
-import           Data.List.NonEmpty  as NE
+import           Data.List           as L
 import qualified Data.Map            as M
 import           Data.Maybe          (fromMaybe)
 import qualified Data.Vector         as V
@@ -35,19 +35,22 @@ newtype S
 
 -- | compile use O(|tok|) time to compile an KMP automaton
 compile :: (Eq tok,Ord tok) => V.Vector tok -> Automaton tok
-compile pat = Automaton next where
-  piF = prefix pat
-  n = VG.length pat
-  next
-    | n == 0    = V.singleton M.empty
-    | otherwise = V.fromList $ step <$> [0..n] -- non-empty
-  step s
-    | s == 0    = goNext
-    | s == n    = fallback
-    | otherwise = goNext `M.union` fallback
-    where
-      goNext   = M.singleton (pat!s) (s+1)
-      fallback = next!(piF!(s-1))
+compile pat
+  | VG.null pat = Automaton (V.singleton M.empty) -- for null-pattern
+  | otherwise   = Automaton next
+  where
+    n      = VG.length pat
+    next   = V.fromList $ snd <$> L.scanl' step (0,goNext 0) [1..n] -- non-empty here
+    go s c = fromMaybe 0 $ next!s M.!? c
+
+    -- | state transfer table (goto next, pat!s must exist)
+    goNext s = M.singleton (pat!s) (s+1)
+    step (patState,_) s
+      | s == n    = (patState',fallback)
+      | otherwise = (patState',goNext s `M.union` fallback)
+      where
+        fallback   = next!patState       -- state transfer table (fallback to other state)
+        patState'  = go patState (pat!s)
 
 instance (Eq tok,Ord tok) => A.Automaton (Automaton tok) where
   type instance State (Automaton tok) = S
