@@ -1,12 +1,15 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TypeFamilies  #-}
 module Algorithm.Text.KMP(prefix,compile,Automaton) where
 
+import           Control.DeepSeq     (NFData)
 import qualified Data.Automaton      as A
 import           Data.List           as L
 import qualified Data.Map            as M
 import           Data.Maybe          (fromMaybe)
 import qualified Data.Vector         as V
 import           Data.Vector.Generic as VG
+import           GHC.Generics        (Generic)
 import           Prelude             as P
 
 -- | prefix function of a string, which means:
@@ -27,11 +30,14 @@ prefix toks = piF where
 
 newtype Automaton tok
   = Automaton { next :: V.Vector (M.Map tok Int) }
-  deriving (Show)
+  deriving (Generic, Show)
 
+instance (NFData tok) => NFData (Automaton tok)
 -- | state of KMP automaton
 newtype S
   = S Int
+  deriving (Eq, Generic, Show)
+instance NFData S
 
 -- | compile use O(|tok|) time to compile an KMP automaton
 compile :: (Eq tok,Ord tok) => [tok] -> Automaton tok
