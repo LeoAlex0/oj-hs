@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
-module Algorithm.KMP.Hspec where
+module Algorithm.KMPSpec where
 import           Algorithm.Text.KMP        (compile, prefix)
 import           Data.Automaton            (Automaton (isAccept), run)
 import qualified Data.ByteString           as BS (isSuffixOf, unpack)

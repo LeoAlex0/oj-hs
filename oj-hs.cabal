@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      Algorithm.Text.AhoCorasick
       Algorithm.Text.KMP
       Algorithm.Text.SuffixAutomaton
       Data.Automaton
@@ -130,8 +131,8 @@ test-suite oj-hs-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Data.Trie.Hspec
-      Data.Trie.QuickCheck
+      Algorithm.KMPSpec
+      Data.TrieSpec
       Paths_oj_hs
   hs-source-dirs:
       test
@@ -160,6 +161,7 @@ benchmark benchmark-prac-haskell-bench
   type: exitcode-stdio-1.0
   main-is: BenchMain.hs
   other-modules:
+      Algorithm.KMP.Bench
       Data.FingerTree.Bench
       Data.SegTree.Bench
       Paths_oj_hs

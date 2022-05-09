@@ -1,16 +1,19 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
-module Data.Trie.Hspec where
+module Data.TrieSpec where
 
 import qualified Data.Set                 as S
-import           Data.Trie                (elem, empty, insert, toList)
-import           Data.Trie.QuickCheck
+import           Data.Trie                (Trie (Trie), elem, empty, insert,
+                                           toList)
 import           Prelude                  hiding (elem)
 import           Test.HUnit
 import           Test.Hspec
 import           Test.Hspec.Contrib.HUnit (fromHUnitTest)
 import           Test.Hspec.QuickCheck
 import           Test.QuickCheck
+
+instance (Eq tok,Ord tok,Arbitrary tok) => Arbitrary (Trie tok) where
+  arbitrary = Trie <$> arbitrary <*> arbitrary
 
 insertAll = foldr insert empty
 
