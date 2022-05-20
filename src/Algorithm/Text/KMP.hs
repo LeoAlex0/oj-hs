@@ -3,6 +3,7 @@
 module Algorithm.Text.KMP(prefix,compile,Automaton) where
 
 import           Control.DeepSeq     (NFData)
+import qualified Data.Array          as A
 import qualified Data.Automaton      as A
 import           Data.List           as L
 import qualified Data.Map            as M
@@ -29,34 +30,34 @@ prefix toks = piF where
     | otherwise   = findP c $ piF!(j-1)
 
 newtype Automaton tok
-  = Automaton { next :: V.Vector (M.Map tok Int) }
+  = Automaton { next :: A.Array S (M.Map tok S) }
   deriving (Generic, Show)
 
 instance (NFData tok) => NFData (Automaton tok)
 -- | state of KMP automaton
 newtype S
-  = S Int
-  deriving (Eq, Generic, Show)
+  = S { unS :: Int }
+  deriving (A.Ix, Eq, Generic, Ord, Show)
 instance NFData S
 
 -- | compile use O(|tok|) time to compile an KMP automaton
 compile :: (Eq tok,Ord tok) => [tok] -> Automaton tok
-compile pat = Automaton next
+compile pat = ret
   where
-    next = V.fromList $ hgoto:L.zipWith M.union gotos fallbacks
+    ret = Automaton next
+    next = A.listArray (S 0,S (L.length pat)) $ hgoto:L.zipWith (<>) gotos fallbacks
 
     hgoto:gotos = L.zipWith goNext [0..] pat <> [M.empty]
-    fallbacks   = (next!) <$> piF
+    fallbacks   = (next A.!) <$> piF
 
-    piF     = L.scanl run 0 (L.tail pat) -- prefix function , which equals `prefix pat`
-    run s c = fromMaybe 0 $ next!s M.!? c
-    -- | state transfer table (goto next, pat!s must exist)
-    goNext s c = M.singleton c (s+1)
+    -- | prefix function, which also equals `prefix pat`
+    piF = A.scan ret (L.tail pat)
+    goNext s c = M.singleton c (S (s+1))
 
 instance (Eq tok,Ord tok) => A.Automaton (Automaton tok) where
   type instance State (Automaton tok) = S
   type instance Token (Automaton tok) = tok
 
-  isAccept Automaton {next=n} (S s) = s+1 == V.length n
+  isAccept Automaton {next=n} = (==snd (A.bounds n))
   initialState _ = S 0
-  step Automaton {next=n} c (S s) = S .fromMaybe 0 $ M.lookup c (n!s)
+  step a@Automaton {next=n} c s = A.initialState a `fromMaybe` (n A.! s M.!? c)

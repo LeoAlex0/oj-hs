@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-
 module Main where
 
 import qualified Algorithm.KMP.Bench   as KMP

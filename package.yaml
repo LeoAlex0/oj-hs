@@ -44,6 +44,26 @@ executables:
     main: Main.hs
     source-dirs: app/all-in-one
     ghc-options:
+      - -Wall
+      - -Wcompat
+      - -Widentities
+      - -Wincomplete-record-updates
+      - -Wincomplete-uni-patterns
+      - -Wpartial-fields
+      - -Wredundant-constraints
+    dependencies:
+      - base >= 4.11 && < 10
+      - rio >= 0.1.12.0
+      - lens
+      - optparse-simple
+      - hpack
+      - ghc-lib-parser
+    default-extensions:
+      - NoImplicitPrelude
+  all-in-one-legacy:
+    main: Main.hs
+    source-dirs: app/all-in-one-legacy
+    ghc-options:
       - -threaded
       - -rtsopts
       - -with-rtsopts=-N
@@ -51,7 +71,6 @@ executables:
       - haskell-src-exts
       - haskell-names
       - syb
-      - hashable
   luogu-wip:
     main: Main.hs
     source-dirs: app/luogu-wip
