@@ -1,7 +1,10 @@
 {-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FunctionalDependencies #-}
 
-module Data.SegTree where
+module Data.SegTree(
+  Action(..),SegTree,
+  size,query,apply,fromList
+) where
 
 import           Control.DeepSeq (NFData)
 import           Data.List       (unfoldr)

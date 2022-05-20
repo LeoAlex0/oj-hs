@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies #-}
-module Data.Automaton where
+module Data.Automaton(Automaton(..),scanFrom,scan,runFrom,run) where
 
 class Automaton (a :: *) where
     type family State a

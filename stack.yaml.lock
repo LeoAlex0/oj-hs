@@ -3,10 +3,17 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
+packages:
+- completed:
+    hackage: haskell-names-0.9.9@sha256:8cd295ff72cbc87b330e4b9955eae3095a701b3e8b9a633c04cf150977e90d70,12974
+    pantry-tree:
+      size: 25945
+      sha256: c8ca8eafe4d3e6d9f9b6209d1790edd7cf79f84b71c68657e6f7713d630646f4
+  original:
+    hackage: haskell-names-0.9.9@sha256:8cd295ff72cbc87b330e4b9955eae3095a701b3e8b9a633c04cf150977e90d70,12974
 snapshots:
-- original: lts-14.27
-  completed:
-    sha256: 7ea31a280c56bf36ff591a7397cc384d0dff622e7f9e4225b47d8980f019a0f0
-    url: https://mirrors.tuna.tsinghua.edu.cn/stackage/stackage-snapshots/lts/14/27.yaml
-    size: 524996
-packages: []
+- completed:
+    size: 588043
+    url: https://mirrors.tuna.tsinghua.edu.cn/stackage/stackage-snapshots/nightly/2022/5/20.yaml
+    sha256: 7800e52de866bab899c118558f3a48e455f9f57fb3b3595e0002018fbea5ee58
+  original: nightly-2022-05-20

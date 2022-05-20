@@ -134,7 +134,6 @@ instance (Measured v a) => Semigroup (FingerTree v a) where
 -- | 'empty' and '><'.
 instance (Measured v a) => Monoid (FingerTree v a) where
   mempty = empty
-  mappend = (><)
 
 -- Explicit Digit type (Exercise 1)
 

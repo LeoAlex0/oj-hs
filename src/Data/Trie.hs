@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Data.Trie where
+module Data.Trie(Trie,empty,insert,elem,toList) where
 
 import           Control.DeepSeq (NFData)
 import qualified Data.Map        as M
