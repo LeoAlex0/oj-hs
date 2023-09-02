@@ -1,6 +1,6 @@
-cabal-version: 1.12
+cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.34.7.
+-- This file has been generated from package.yaml by hpack version 0.35.2.
 --
 -- see: https://github.com/sol/hpack
 
@@ -12,9 +12,9 @@ bug-reports:    https://github.com/LeoAlex0/oj-hs/issues
 author:         zLeoAlex
 maintainer:     z.alex.leo@outlook.com
 copyright:      zLeoAlex
-license:        BSD3
+license:        BSD-3-Clause
 license-file:   LICENSE
-build-type:     Simple
+build-type:     Custom
 extra-source-files:
     README.md
     ChangeLog.md
@@ -22,6 +22,11 @@ extra-source-files:
 source-repository head
   type: git
   location: https://github.com/LeoAlex0/oj-hs
+
+custom-setup
+  setup-depends:
+      Cabal ==3.*
+    , base >=4.7 && <5
 
 library
   exposed-modules:
@@ -39,6 +44,8 @@ library
       Solution.Luogu.P1383
       Solution.Luogu.P3156
   other-modules:
+      Paths_oj_hs
+  autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
       src
@@ -65,6 +72,8 @@ executable all-in-one
       App.Run
       App.Types
       App.Util
+      Paths_oj_hs
+  autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
       app/all-in-one
@@ -95,6 +104,8 @@ executable codeforces-wip
   main-is: Main.hs
   other-modules:
       Paths_oj_hs
+  autogen-modules:
+      Paths_oj_hs
   hs-source-dirs:
       app/codeforces-wip
   build-depends:
@@ -113,9 +124,33 @@ executable codeforces-wip
     , vector
   default-language: Haskell2010
 
+executable custom-setup
+  main-is: ./Setup.hs
+  other-modules:
+      Paths_oj_hs
+  autogen-modules:
+      Paths_oj_hs
+  build-depends:
+      Cabal ==3.*
+    , array
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , hashable
+    , mtl
+    , parsec
+    , parser-combinators
+    , text
+    , unordered-containers
+    , vector
+  default-language: Haskell2010
+
 executable luogu-wip
   main-is: Main.hs
   other-modules:
+      Paths_oj_hs
+  autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
       app/luogu-wip
@@ -141,6 +176,8 @@ test-suite oj-hs-test
   other-modules:
       Algorithm.KMPSpec
       Data.TrieSpec
+      Paths_oj_hs
+  autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
       test
@@ -172,6 +209,8 @@ benchmark benchmark-prac-haskell-bench
       Algorithm.KMP.Bench
       Data.FingerTree.Bench
       Data.SegTree.Bench
+      Paths_oj_hs
+  autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
       bench

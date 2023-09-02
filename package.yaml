@@ -1,7 +1,7 @@
 name: oj-hs
 version: 0.1.0.0
 github: "LeoAlex0/oj-hs"
-license: BSD3
+license: BSD-3-Clause
 author: "zLeoAlex"
 maintainer: "z.alex.leo@outlook.com"
 copyright: "zLeoAlex"
@@ -18,6 +18,11 @@ extra-source-files:
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
 description: Please see the README on GitHub at <https://github.com/LeoAlex0/oj-hs#readme>
+
+custom-setup:
+  dependencies: &setup-deps
+    - base >= 4.7 && < 5
+    - Cabal >=3 && < 4
 
 dependencies:
   - base >= 4.7 && < 5
@@ -40,6 +45,11 @@ library:
     - -O2
 
 executables:
+  custom-setup:
+    main: ./Setup.hs
+    source-dirs: []
+    dependencies: *setup-deps
+
   all-in-one:
     main: Main.hs
     source-dirs: app/all-in-one

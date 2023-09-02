@@ -7,7 +7,7 @@
   outputs = { self, nixpkgs }:
     let
       supportedSystems = [ "x86_64-linux" "x86_64-darwin" ];
-      ghcVersion = "ghc94";
+      # ghcVersion = "ghc94";
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       nixpkgsFor = forAllSystems (system: import nixpkgs {
         inherit system;
@@ -16,7 +16,7 @@
     in
     {
       overlay = (final: prev: {
-        haskellPackages = prev.haskell.packages.${ghcVersion};
+        # haskellPackages = prev.haskell.packages.${ghcVersion};
         oj-hs = final.haskellPackages.callCabal2nix "oj-hs" ./. { };
       });
       packages = forAllSystems (system: {
@@ -32,7 +32,7 @@
           withHoogle = true;
           buildInputs = with haskellPackages; [
             haskell-language-server
-            # ghcid
+            ghcid
             cabal-install
           ];
           # Change the prompt to show that you are in a devShell
