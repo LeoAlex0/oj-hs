@@ -15,7 +15,7 @@ In this repo, it's used to pack answers to submit.
 
 ## Example
 
-in this example, we haave 2 source file.
+in this example, we have 2 source file.
 
 Main.hs
 
