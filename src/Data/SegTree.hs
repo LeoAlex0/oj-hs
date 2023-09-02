@@ -1,14 +1,19 @@
-{-# LANGUAGE DeriveGeneric          #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FunctionalDependencies #-}
 
-module Data.SegTree(
-  Action(..),SegTree,
-  size,query,apply,fromList
-) where
+module Data.SegTree
+  ( Action (..),
+    SegTree,
+    size,
+    query,
+    apply,
+    fromList,
+  )
+where
 
-import           Control.DeepSeq (NFData)
-import           Data.List       (unfoldr)
-import           GHC.Generics    (Generic)
+import Control.DeepSeq (NFData)
+import Data.List (unfoldr)
+import GHC.Generics (Generic)
 
 class Action a v | v -> a where
   action :: a -> v -> v
@@ -18,16 +23,16 @@ data SegTree a v
   | Branch Int a v !(SegTree a v) !(SegTree a v)
   deriving (Generic, Show)
 
-instance (NFData a,NFData v) => NFData (SegTree a v)
+instance (NFData a, NFData v) => NFData (SegTree a v)
 
 {-# INLINE size #-}
 size :: SegTree a v -> Int
-size (Leaf _)           = 1
+size (Leaf _) = 1
 size (Branch l _ _ _ _) = l
 
 {-# INLINE queryAll #-}
 queryAll :: SegTree a v -> v
-queryAll (Leaf v)           = v
+queryAll (Leaf v) = v
 queryAll (Branch _ _ v _ _) = v
 
 query :: (Monoid v, Action a v) => Int -> Int -> SegTree a v -> v
@@ -60,13 +65,14 @@ apply a l r se@(Branch s a1 v pr sf)
     lInPr = l < mid
     rInPr = r <= mid
 
-fromList :: (Monoid a,Semigroup v,Action a v) => [v] -> SegTree a v
-fromList []  = error "empty list cannot be a segtree"
-fromList xs = root where
+fromList :: (Monoid a, Semigroup v, Action a v) => [v] -> SegTree a v
+fromList [] = error "empty list cannot be a segtree"
+fromList xs = root
+  where
     leaves = Leaf <$> xs
-    ([root]:_) = dropWhile (not.null.tail) $ iterate (unfoldr buildUp) leaves
-    branch l r = Branch (size l+size r) mempty (queryAll l <> queryAll r) l r
-    buildUp []         = Nothing
-    buildUp [x]        = Just (x,[])
-    buildUp [x,y,z]    = Just ((x `branch` y) `branch` z,[])
-    buildUp (x:y:rest) = Just (x `branch` y,rest)
+    ([root] : _) = dropWhile (not . null . tail) $ iterate (unfoldr buildUp) leaves
+    branch l r = Branch (size l + size r) mempty (queryAll l <> queryAll r) l r
+    buildUp [] = Nothing
+    buildUp [x] = Just (x, [])
+    buildUp [x, y, z] = Just ((x `branch` y) `branch` z, [])
+    buildUp (x : y : rest) = Just (x `branch` y, rest)

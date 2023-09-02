@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -O2 #-}
 
-module Main(P.main) where
+module Main (P.main) where
 
-import           Solution.Luogu.P3156 as P (main)
+import Solution.Luogu.P3156 as P (main)

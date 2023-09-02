@@ -1,12 +1,13 @@
 {-# LANGUAGE TypeFamilies #-}
-module Data.Automaton(Automaton(..),scanFrom,scan,runFrom,run) where
+
+module Data.Automaton (Automaton (..), scanFrom, scan, runFrom, run) where
 
 class Automaton (a :: *) where
-    type family State a
-    type family Token a
-    isAccept :: a -> State a -> Bool
-    initialState :: a-> State a
-    step :: a -> Token a -> State a -> State a
+  type State a
+  type Token a
+  isAccept :: a -> State a -> Bool
+  initialState :: a -> State a
+  step :: a -> Token a -> State a -> State a
 
 -- | scan an automaton from a customized start state
 scanFrom :: (Automaton a) => a -> [Token a] -> State a -> [State a]

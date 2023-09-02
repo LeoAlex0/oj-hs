@@ -1,26 +1,26 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedLists            #-}
-{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Data.FingerTree.Bench where
 
-import           Control.DeepSeq         (NFData)
-import           Control.Monad           (replicateM)
-import           Criterion.Main
-import           Data.FingerTree
-import           Data.FingerTree.Measure
-import           GHC.Generics            (Generic)
-import         qualified  System.Random as R
+import Control.DeepSeq (NFData)
+import Control.Monad (replicateM)
+import Criterion.Main
+import Data.FingerTree
+import Data.FingerTree.Measure
+import GHC.Generics (Generic)
+import qualified System.Random as R
 
-deriving instance R.Random a => R.Random (Value a)
+deriving instance (R.Random a) => R.Random (Value a)
 
 trees :: IO (FingerTree Size (Value Int), FingerTree Size (Value Int), FingerTree Size (Value Int))
 trees = do
   raw_1e4 <- replicateM (10 ^ 4) R.randomIO
   raw_1e5 <- replicateM (10 ^ 5) R.randomIO
   raw_1e6 <- replicateM (10 ^ 6) R.randomIO
-  pure (fromList raw_1e4,fromList raw_1e5,fromList raw_1e6)
+  pure (fromList raw_1e4, fromList raw_1e5, fromList raw_1e6)
 
 -- Our benchmark harness.
 -- >>> [1..1e5] :: FingerTree Size (Value Int)
