@@ -22,7 +22,12 @@ main = do
                 <> short 'v'
                 <> help "Verbose output?"
             )
-          <*> strOption (long "package" <> help "package.yaml to pack")
+          <*> strOption
+            ( long "package"
+                <> short 'p'
+                <> value "."
+                <> help "package.yaml to pack"
+            )
       )
       empty
   lo <- logOptionsHandle stderr (optionsVerbose options)
