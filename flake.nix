@@ -4,28 +4,40 @@
   inputs = {
     nixpkgs.url = "nixpkgs/nixpkgs-unstable";
   };
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
-      supportedSystems = [ "x86_64-linux" "x86_64-darwin" ];
-      # ghcVersion = "ghc94";
+      supportedSystems = [
+        "x86_64-linux"
+        "x86_64-darwin"
+      ];
+      ghcVersion = "ghc96";
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-      nixpkgsFor = forAllSystems (system: import nixpkgs {
-        inherit system;
-        overlays = [ self.overlay ];
-      });
+      nixpkgsFor = forAllSystems (
+        system:
+        import nixpkgs {
+          inherit system;
+          overlays = [ self.overlay ];
+        }
+      );
     in
     {
-      overlay = (final: prev: {
-        # haskellPackages = prev.haskell.packages.${ghcVersion};
-        oj-hs = final.haskellPackages.callCabal2nix "oj-hs" ./. { };
-      });
+      overlay = (
+        final: prev: {
+          haskellPackages = prev.haskell.packages.${ghcVersion};
+          oj-hs = final.haskellPackages.callCabal2nix "oj-hs" ./. { };
+        }
+      );
       packages = forAllSystems (system: {
         oj-hs = nixpkgsFor.${system}.oj-hs;
       });
       defaultPackage = forAllSystems (system: self.packages.${system}.oj-hs);
       checks = self.packages;
-      devShell = forAllSystems (system:
-        let haskellPackages = nixpkgsFor.${system}.haskellPackages;
+      devShell = forAllSystems (
+        system:
+        let
+          haskellPackages = nixpkgsFor.${system}.haskellPackages;
+          pkgs = nixpkgsFor.${system};
         in
         haskellPackages.shellFor {
           packages = p: [ self.packages.${system}.oj-hs ];
@@ -34,9 +46,12 @@
             haskell-language-server
             ghcid
             cabal-install
+
+            pkgs.openspec
           ];
           # Change the prompt to show that you are in a devShell
           shellHook = "export PS1='\\e[1;34mdev > \\e[0m'";
-        });
+        }
+      );
     };
 }
