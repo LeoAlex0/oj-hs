@@ -1,0 +1,87 @@
+module Bundler.RenameSpec where
+
+import Bundler.Rename
+  ( NameTransform (transformGeneratedIdentifier, transformOriginalModule)
+  , detectNameTransformConflict
+  , generatedIdentifier
+  )
+import Data.Char (isLower, isUpper)
+import Data.Maybe (isJust)
+import System.Directory (removeFile)
+import System.Exit (ExitCode (ExitSuccess))
+import System.IO (hClose, hPutStr, openTempFile)
+import System.Process (readProcessWithExitCode)
+import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
+
+spec :: Spec
+spec = describe "Bundler.Rename" $ do
+  describe "generatedIdentifier" $ do
+    it "generates varid names for lowercase identifiers" $ do
+      generated "Data.Text" "value" `shouldSatisfy` startsWith isLower
+
+    it "uses the module-derived prefix for identifiers" $ do
+      generated "Data.Text" "value" `shouldBe` "data_u46_Text_value"
+
+    it "generates conid names for uppercase identifiers" $ do
+      generated "Data.Text" "Value" `shouldSatisfy` startsWith isUpper
+
+    it "does not let identifier names start with digits" $ do
+      generated "1.Data" "2value" `shouldSatisfy` startsWith isLower
+
+    it "preserves varsym spelling as an operator" $ do
+      generated "Data.Text" "+>" `shouldSatisfy` isVariableOperator
+
+    it "preserves consym spelling as a constructor operator" $ do
+      generated "Data.Text" ":+>" `shouldSatisfy` isConstructorOperator
+
+    it "generates operator names usable in fixity declarations" $ do
+      let valueOperator = generated "Data.FingerTree" "><"
+          constructorOperator = generated "Data.FingerTree" ":<"
+      compileHaskellSource
+        ( unlines
+            [ "{-# LANGUAGE TypeOperators #-}"
+            , "module RenameFixity where"
+            , "infixl 5 " ++ valueOperator ++ ", " ++ constructorOperator
+            , "data Pair a b = a " ++ constructorOperator ++ " b"
+            , "(" ++ valueOperator ++ ") :: Int -> Int -> Int"
+            , "x " ++ valueOperator ++ " y = x + y"
+            ]
+        )
+
+    it "detects generated identifier conflicts" $ do
+      let left = generatedIdentifier "A.B" "value"
+          right = left {transformOriginalModule = "Other.Module"}
+      detectNameTransformConflict [left, right] `shouldSatisfy` isJust
+
+generated :: String -> String -> String
+generated moduleName occurrenceName =
+  transformGeneratedIdentifier (generatedIdentifier moduleName occurrenceName)
+
+startsWith :: (Char -> Bool) -> String -> Bool
+startsWith predicate (first : _) = predicate first
+startsWith _ [] = False
+
+isVariableOperator :: String -> Bool
+isVariableOperator value@(first : _) =
+  first /= ':' && all isOperatorChar value
+isVariableOperator [] = False
+
+isConstructorOperator :: String -> Bool
+isConstructorOperator (':' : rest) =
+  not (null rest) && all isOperatorChar rest
+isConstructorOperator _ = False
+
+isOperatorChar :: Char -> Bool
+isOperatorChar char =
+  char `elem` ("!#$%&*+./<=>?@\\^|-~:" :: String)
+
+compileHaskellSource :: String -> IO ()
+compileHaskellSource source = do
+  (path, handle) <- openTempFile "/tmp" "oj-hs-rename-fixity.hs"
+  hPutStr handle source
+  hClose handle
+  (exitCode, _stdout, stderr) <-
+    readProcessWithExitCode "ghc" ["-fforce-recomp", "-fno-code", path] ""
+  removeFile path
+  exitCode `shouldBe` ExitSuccess
+  stderr `shouldBe` ""

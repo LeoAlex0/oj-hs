@@ -33,6 +33,18 @@ library
       Algorithm.Text.AhoCorasick
       Algorithm.Text.KMP
       Algorithm.Text.SuffixAutomaton
+      Bundler
+      Bundler.Cabal
+      Bundler.DCE
+      Bundler.Env
+      Bundler.Error
+      Bundler.Flatten
+      Bundler.GHC
+      Bundler.Options
+      Bundler.Output
+      Bundler.Rename
+      Bundler.SourceBundle
+      Bundler.Transform
       Data.Automaton
       Data.EulerTourTree
       Data.FingerTree
@@ -51,16 +63,23 @@ library
       src
   ghc-options: -O2
   build-depends:
-      array
+      Cabal ==3.*
+    , array
     , base >=4.7 && <5
     , bytestring
     , containers
     , deepseq
+    , directory
+    , filepath
+    , ghc
     , hashable
     , mtl
+    , optparse-applicative
     , parsec
     , parser-combinators
+    , process
     , text
+    , time
     , unordered-containers
     , vector
   default-language: Haskell2010
@@ -81,21 +100,28 @@ executable all-in-one
       NoImplicitPrelude
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
   build-depends:
-      array
+      Cabal ==3.*
+    , array
     , base >=4.11 && <10
     , bytestring
     , containers
     , deepseq
+    , directory
+    , filepath
+    , ghc
     , ghc-lib-parser
     , hashable
     , hpack
     , lens
     , mtl
+    , optparse-applicative
     , optparse-simple
     , parsec
     , parser-combinators
+    , process
     , rio >=0.1.12.0
     , text
+    , time
     , unordered-containers
     , vector
   default-language: Haskell2010
@@ -109,17 +135,24 @@ executable codeforces-wip
   hs-source-dirs:
       app/codeforces-wip
   build-depends:
-      array
+      Cabal ==3.*
+    , array
     , base >=4.7 && <5
     , bytestring
     , containers
     , deepseq
+    , directory
+    , filepath
+    , ghc
     , hashable
     , mtl
     , oj-hs
+    , optparse-applicative
     , parsec
     , parser-combinators
+    , process
     , text
+    , time
     , unordered-containers
     , vector
   default-language: Haskell2010
@@ -137,11 +170,48 @@ executable custom-setup
     , bytestring
     , containers
     , deepseq
+    , directory
+    , filepath
+    , ghc
     , hashable
     , mtl
+    , optparse-applicative
     , parsec
     , parser-combinators
+    , process
     , text
+    , time
+    , unordered-containers
+    , vector
+  default-language: Haskell2010
+
+executable haskell-bundler
+  main-is: Main.hs
+  other-modules:
+      Paths_oj_hs
+  autogen-modules:
+      Paths_oj_hs
+  hs-source-dirs:
+      app/bundler
+  build-depends:
+      Cabal ==3.*
+    , array
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , directory
+    , filepath
+    , ghc
+    , hashable
+    , mtl
+    , oj-hs
+    , optparse-applicative
+    , parsec
+    , parser-combinators
+    , process
+    , text
+    , time
     , unordered-containers
     , vector
   default-language: Haskell2010
@@ -155,17 +225,24 @@ executable luogu-wip
   hs-source-dirs:
       app/luogu-wip
   build-depends:
-      array
+      Cabal ==3.*
+    , array
     , base >=4.7 && <5
     , bytestring
     , containers
     , deepseq
+    , directory
+    , filepath
+    , ghc
     , hashable
     , mtl
     , oj-hs
+    , optparse-applicative
     , parsec
     , parser-combinators
+    , process
     , text
+    , time
     , unordered-containers
     , vector
   default-language: Haskell2010
@@ -175,6 +252,8 @@ test-suite oj-hs-test
   main-is: Spec.hs
   other-modules:
       Algorithm.KMPSpec
+      Bundler.GHCSpec
+      Bundler.RenameSpec
       Data.TrieSpec
       Paths_oj_hs
   autogen-modules:
@@ -183,21 +262,28 @@ test-suite oj-hs-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      HUnit
+      Cabal ==3.*
+    , HUnit
     , QuickCheck
     , array
     , base >=4.7 && <5
     , bytestring
     , containers
     , deepseq
+    , directory
+    , filepath
+    , ghc
     , hashable
     , hspec
     , hspec-contrib
     , mtl
     , oj-hs
+    , optparse-applicative
     , parsec
     , parser-combinators
+    , process
     , text
+    , time
     , unordered-containers
     , vector
   default-language: Haskell2010
@@ -216,19 +302,26 @@ benchmark benchmark-prac-haskell-bench
       bench
   ghc-options: -O2
   build-depends:
-      array
+      Cabal ==3.*
+    , array
     , base >=4.7 && <5
     , bytestring
     , containers
     , criterion
     , deepseq
+    , directory
+    , filepath
+    , ghc
     , hashable
     , mtl
     , oj-hs
+    , optparse-applicative
     , parsec
     , parser-combinators
+    , process
     , random
     , text
+    , time
     , unordered-containers
     , vector
   default-language: Haskell2010
