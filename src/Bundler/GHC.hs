@@ -10,7 +10,7 @@ import Control.Exception (SomeException, try)
 import Control.Monad.IO.Class (liftIO)
 import Data.Char (isSpace)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
-import Data.List (nub)
+import Data.List (isInfixOf, nub)
 import Data.Maybe (mapMaybe)
 import Bundler.Cabal (ExecutableInfo (..), PackageInfo (..))
 import Bundler.Error (BundleError (..))
@@ -56,7 +56,9 @@ import GHC.Unit.Module.Graph
 import GHC.Unit.Module.Location (ml_hs_file)
 import GHC.Utils.Logger (LogAction, getLogger, log_default_user_context)
 import GHC.Utils.Outputable (renderWithContext)
+import System.Directory (doesDirectoryExist, listDirectory)
 import System.Environment (lookupEnv)
+import System.FilePath ((</>), takeDirectory, takeFileName)
 import System.Process (readProcess)
 
 newtype GhcConfig = GhcConfig
@@ -136,7 +138,10 @@ loadInSession packageInfo executableInfo libDir = do
   pushLogHookM (captureDiagnostics diagnosticsRef)
   dflags0 <- getSessionDynFlags
   logger <- getLogger
-  let arguments = ghcArguments packageInfo executableInfo
+  autogenSourceDirs <- liftIO (findAutogenSourceDirs packageInfo executableInfo)
+  let allSourceDirs =
+        nub (executableSourceDirs executableInfo ++ packageLibrarySourceDirs packageInfo ++ autogenSourceDirs)
+      arguments = ghcArguments packageInfo executableInfo allSourceDirs
   (dflags1, leftovers, _warnings) <- parseDynamicFlags logger dflags0 (map noLoc arguments)
   if not (null leftovers)
     then pure (Left (GhcSessionFailed ("Unrecognized GHC options: " ++ show (map unLocString leftovers))))
@@ -150,9 +155,7 @@ loadInSession packageInfo executableInfo libDir = do
         Failed -> pure (Left (GhcLoadFailed (loadFailureMessage executableInfo diagnostics)))
         Succeeded -> do
           moduleGraph <- getModuleGraph
-          let allSourceDirs =
-                nub (executableSourceDirs executableInfo ++ packageLibrarySourceDirs packageInfo)
-              summaries = moduleGraphSummariesInDependencyOrder moduleGraph
+          let summaries = moduleGraphSummariesInDependencyOrder moduleGraph
           loaded <- mapM (toLoadedModule allSourceDirs) summaries
           pure
             ( Right
@@ -179,8 +182,8 @@ loadFailureMessage executableInfo diagnostics =
       ++ ["GHC diagnostics:" | not (null diagnostics)]
       ++ diagnostics
 
-ghcArguments :: PackageInfo -> ExecutableInfo -> [String]
-ghcArguments packageInfo executableInfo =
+ghcArguments :: PackageInfo -> ExecutableInfo -> [FilePath] -> [String]
+ghcArguments packageInfo executableInfo sourceDirs =
   ["-fno-code"]
     ++ sourceDirArgs
     ++ packageArgs
@@ -188,13 +191,50 @@ ghcArguments packageInfo executableInfo =
     ++ executableCompilerOptions executableInfo
   where
     sourceDirArgs =
-      map ("-i" ++) (nub (executableSourceDirs executableInfo ++ packageLibrarySourceDirs packageInfo))
+      map ("-i" ++) sourceDirs
     packageArgs =
       concatMap
         (\packageNameValue -> ["-package", packageNameValue])
         (filter (/= packageName packageInfo) (nub (executableDependencyPackageNames executableInfo)))
     extensionArgs =
       map ("-X" ++) (executableDefaultExtensions executableInfo)
+
+findAutogenSourceDirs :: PackageInfo -> ExecutableInfo -> IO [FilePath]
+findAutogenSourceDirs packageInfo executableInfo = do
+  let buildRoot = packageRoot packageInfo </> "dist-newstyle" </> "build"
+  exists <- doesDirectoryExist buildRoot
+  if not exists
+    then pure []
+    else do
+      dirs <- collectDirectories 8 buildRoot
+      pure
+        [ dir
+        | dir <- dirs
+        , takeFileName dir == "autogen"
+        , packageDisplayName packageInfo `isInfixOf` dir
+        , takeFileName (takeDirectory dir) `elem` ["build", executableName executableInfo]
+        ]
+
+collectDirectories :: Int -> FilePath -> IO [FilePath]
+collectDirectories depth root
+  | depth <= 0 = pure []
+  | otherwise = do
+      exists <- doesDirectoryExist root
+      if not exists
+        then pure []
+        else do
+          entries <- listDirectory root
+          let paths = map (root </>) entries
+          childDirs <- filterMDirectory paths
+          nested <- mapM (collectDirectories (depth - 1)) childDirs
+          pure (childDirs ++ concat nested)
+
+filterMDirectory :: [FilePath] -> IO [FilePath]
+filterMDirectory [] = pure []
+filterMDirectory (path : rest) = do
+  isDirectory <- doesDirectoryExist path
+  remaining <- filterMDirectory rest
+  pure ([path | isDirectory] ++ remaining)
 
 toLoadedModule :: [FilePath] -> ModSummary -> Ghc LoadedModule
 toLoadedModule sourceDirs summary = do

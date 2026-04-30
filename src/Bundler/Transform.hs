@@ -47,7 +47,7 @@ import GHC.Utils.Outputable
   , showSDocUnsafe
   , withUserStyle
   )
-import Language.Haskell.Syntax.Module.Name (ModuleName, moduleNameString)
+import Language.Haskell.Syntax.Module.Name (ModuleName, mkModuleName, moduleNameString)
 
 rewriteRenamedSource :: [String] -> RenamedSource -> RenamedSource
 rewriteRenamedSource internalModules =
@@ -175,9 +175,13 @@ qualifierModuleForModule ::
   Maybe ModuleName
 qualifierModuleForModule internalModules globalRdrEnv nameModuleValue occNameValue
   | moduleNameString (moduleName nameModuleValue) `elem` internalModules = Nothing
+  | moduleNameString (moduleName nameModuleValue) == "GHC.Maybe" = Just (mkModuleName "Prelude")
+  | "RIO.Prelude." `isPrefixOf` moduleNameString (moduleName nameModuleValue) = Just (mkModuleName "RIO")
   | otherwise =
       case globalRdrEnv >>= importedModuleForName nameModuleValue occNameValue of
-        Just importedModule -> Just importedModule
+        Just importedModule
+          | moduleNameString importedModule `elem` internalModules -> Just (moduleName nameModuleValue)
+          | otherwise -> Just importedModule
         Nothing -> Just (moduleName nameModuleValue)
 
 importedModuleForName ::

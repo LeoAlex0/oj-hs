@@ -3,7 +3,7 @@ module Bundler.SourceBundle
   ) where
 
 import Data.Char (isSpace)
-import Data.List (isInfixOf, isPrefixOf, nub, sort)
+import Data.List (isInfixOf, isPrefixOf, isSuffixOf, nub, sort, stripPrefix)
 import Data.Maybe (maybeToList)
 import qualified Data.Set as Set
 import Bundler.Cabal (ExecutableInfo (..), PackageInfo)
@@ -110,9 +110,12 @@ readSourceModule internalModuleNames loadedModule =
               (loadedGlobalRdrEnv loadedModule)
               renamedSource
           declarations =
-            applyExternalIdentifierRewrites
-              externalRewrites
-              (applyDeclarationMappings declarationMappings renderedDeclarations)
+            sanitizePathsModulePathLiterals (loadedModuleName loadedModule) $
+              sanitizeGitHashConstructorExpressions
+                ( applyExternalIdentifierRewrites
+                    externalRewrites
+                    (applyDeclarationMappings declarationMappings renderedDeclarations)
+                )
           declarationGroups =
             buildDeclarationGroups
               (loadedModuleName loadedModule)
@@ -333,6 +336,63 @@ rewriteExternalIdentifierToken rewrites token
       case lookup token rewrites of
         Just replacement -> replacement
         Nothing -> token
+
+sanitizeGitHashConstructorExpressions :: [String] -> [String]
+sanitizeGitHashConstructorExpressions [] = []
+sanitizeGitHashConstructorExpressions [line] = [line]
+sanitizeGitHashConstructorExpressions (line : next : rest)
+  | isGitHashRightStart line next =
+      let replacementLine = replaceGitHashRightStart line
+       in replacementLine : dropGitHashConstructor rest
+  | otherwise = line : sanitizeGitHashConstructorExpressions (next : rest)
+
+isGitHashRightStart :: String -> String -> Bool
+isGitHashRightStart line next =
+  rightToken (lastToken (trim line))
+    && "(GitHash.GitInfo" `isPrefixOf` trimLeft next
+
+rightToken :: String -> Bool
+rightToken token =
+  token == "Right" || ".Right" `isSuffixOf` token
+
+replaceGitHashRightStart :: String -> String
+replaceGitHashRightStart line =
+  replaceLineSuffix "Right" "Left \"\" ::" line
+
+dropGitHashConstructor :: [String] -> [String]
+dropGitHashConstructor [] = []
+dropGitHashConstructor (line : rest)
+  | "Either " `isInfixOf` line && "GitHash.GitInfo" `isInfixOf` line =
+      line : sanitizeGitHashConstructorExpressions rest
+  | otherwise =
+      dropGitHashConstructor rest
+
+replaceLineSuffix :: String -> String -> String -> String
+replaceLineSuffix suffix replacement line =
+  let reversedSuffix = reverse suffix
+      reversedLine = reverse line
+   in case stripPrefix reversedSuffix reversedLine of
+        Just reversedPrefix -> reverse reversedPrefix ++ replacement
+        Nothing -> line
+
+lastToken :: String -> String
+lastToken value =
+  case words value of
+    [] -> ""
+    tokens -> last tokens
+
+sanitizePathsModulePathLiterals :: String -> [String] -> [String]
+sanitizePathsModulePathLiterals moduleNameValue declarations
+  | "Paths_" `isPrefixOf` moduleNameValue =
+      map sanitizeAbsolutePathAssignment declarations
+  | otherwise = declarations
+
+sanitizeAbsolutePathAssignment :: String -> String
+sanitizeAbsolutePathAssignment line =
+  case break (== '"') line of
+    (prefix, '"' : '/' : _rest)
+      | "=" `isInfixOf` prefix -> prefix ++ "\".\""
+    _ -> line
 
 lastIdentifierSegment :: String -> String
 lastIdentifierSegment token =

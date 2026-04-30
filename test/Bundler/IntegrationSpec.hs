@@ -40,8 +40,24 @@ spec = describe "haskell-bundler integration" $ do
       source `shouldSatisfy` (not . ("import qualified Data.FingerTree" `isInfixOf`))
       compileBundledSource outputDir "codeforces-wip.hs"
 
+    it "bundles custom-setup into a standalone Main module" $ \outputDir -> do
+      source <- bundleExecutable outputDir "custom-setup"
+      source `shouldSatisfy` ("module Main (main) where" `isInfixOf`)
+      compileBundledSourceWithPackages outputDir "custom-setup.hs" ["Cabal"]
+
+    it "bundles all-in-one into a standalone Main module" $ \outputDir -> do
+      source <- bundleExecutable outputDir "all-in-one"
+      source `shouldSatisfy` ("module Main (main) where" `isInfixOf`)
+      source `shouldSatisfy` (not . ("import qualified App." `isInfixOf`))
+      source `shouldSatisfy` (not . containsBuildEnvironmentValue)
+      compileBundledSourceWithPackages
+        outputDir
+        "all-in-one.hs"
+        ["rio", "lens", "optparse-simple", "hpack", "ghc-lib-parser"]
+
     it "bootstraps haskell-bundler deterministically" $ \outputDir -> do
       firstSource <- bundleExecutable outputDir "haskell-bundler"
+      firstSource `shouldSatisfy` (not . containsBuildEnvironmentValue)
       bundledBundler <- compileBundledExecutable outputDir "haskell-bundler.hs" "haskell-bundler-bootstrap"
       let secondOutputPath = outputDir </> "haskell-bundler-second.hs"
       (exitCode, stdout, stderr) <-
@@ -64,12 +80,26 @@ bundleExecutable outputDir executableName = do
     Right () -> readFile outputPath
 
 compileBundledSource :: FilePath -> FilePath -> IO ()
-compileBundledSource outputDir fileName = do
+compileBundledSource outputDir fileName =
+  compileBundledSourceWithPackages outputDir fileName []
+
+compileBundledSourceWithPackages :: FilePath -> FilePath -> [String] -> IO ()
+compileBundledSourceWithPackages outputDir fileName packageNames = do
   let outputPath = outputDir </> fileName
+      packageArgs = concatMap (\packageName -> ["-package", packageName]) packageNames
   (exitCode, _stdout, stderr) <-
-    readProcessWithExitCode "ghc" ["-fforce-recomp", "-fno-code", outputPath] ""
+    readProcessWithExitCode "ghc" (["-fforce-recomp", "-fno-code", outputPath] ++ packageArgs) ""
   exitCode `shouldBe` ExitSuccess
   stderr `shouldBe` ""
+
+containsBuildEnvironmentValue :: String -> Bool
+containsBuildEnvironmentValue source =
+  any
+    (`isInfixOf` source)
+    [ "/home/"
+    , "/tmp/"
+    , ".git/"
+    ]
 
 compileBundledExecutable :: FilePath -> FilePath -> FilePath -> IO FilePath
 compileBundledExecutable outputDir fileName executableName = do
