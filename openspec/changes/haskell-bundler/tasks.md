@@ -70,40 +70,40 @@
 - [x] 8.3 使用独立或重置后的 GHC session 分析候选 `Main`，避免与原始 executable `Main` target 冲突
 - [x] 8.4 确认候选模块显式只导出 `main`，避免 Core simplifier 因模块 exports 保留所有顶层绑定
 - [x] 8.5 从简化后的 Core bindings 中提取 live internal `Name` / `Id` 集合
-- [ ] 8.6 建立 Core live set 到候选模块生成标识符和声明组的映射
-- [ ] 8.7 按 Core live set 过滤 transformed Haskell 源声明和声明组
-- [ ] 8.8 对无法安全映射或删除后会破坏可编译性的声明给出诊断或保留策略
-- [ ] 8.9 添加测试验证 Core pruning 会移除未使用定义并保留入口所需定义
+- [x] 8.6 建立 Core live set 到候选模块生成标识符和声明组的映射
+- [x] 8.7 按 Core live set 过滤 transformed Haskell 源声明和声明组
+- [x] 8.8 对无法安全映射或删除后会破坏可编译性的声明给出诊断或保留策略
+- [x] 8.9 添加测试验证 Core pruning 会移除未使用定义并保留入口所需定义
 
 ## 9. 错误处理
 
-- [ ] 9.1 为可执行文件选择、Cabal 配置、GHC 会话初始化、GHC load/typecheck 失败、符号冲突和输出 I/O 定义 `BundleError`
-- [ ] 9.2 渲染带有可操作上下文的用户可见错误信息
-- [ ] 9.3 保留 GHC 对 load、typecheck、CPP 和 TH 失败给出的底层诊断
-- [ ] 9.4 对 CLI 和 bundling 失败返回非零退出码
+- [x] 9.1 为可执行文件选择、Cabal 配置、GHC 会话初始化、GHC load/typecheck 失败、符号冲突和输出 I/O 定义 `BundleError`
+- [x] 9.2 渲染带有可操作上下文的用户可见错误信息
+- [x] 9.3 保留 GHC 对 load、typecheck、CPP 和 TH 失败给出的底层诊断
+- [x] 9.4 对 CLI 和 bundling 失败返回非零退出码
 
 ## 10. MVP 验证
 
-- [ ] 10.1 添加 CLI 解析单元测试
+- [x] 10.1 添加 CLI 解析单元测试
 - [x] 10.2 添加确定性命名 helper 的单元测试
-- [ ] 10.3 添加打包 `luogu-wip` 的集成测试
-- [ ] 10.4 添加打包 `codeforces-wip` 的集成测试
+- [x] 10.3 添加打包 `luogu-wip` 的集成测试
+- [x] 10.4 添加打包 `codeforces-wip` 的集成测试
 - [x] 10.5 在原始包结构之外用 GHC 编译 MVP 生成结果
-- [ ] 10.6 验证生成结果解析了所有引用，只导出 `main`，不包含内部模块 import，且 Core pruning 后仍可编译
-- [ ] 10.7 运行现有项目测试套件
+- [x] 10.6 验证生成结果解析了所有引用，只导出 `main`，不包含内部模块 import，且 Core pruning 后仍可编译
+- [x] 10.7 运行现有项目测试套件
 
 ## 11. 文档
 
-- [ ] 11.1 记录 `haskell-bundler --exec <name> --output <path>` 用法
-- [ ] 11.2 记录 MVP 支持行为、Core pruning 行为和已知限制
-- [ ] 11.3 记录常见 Cabal、GHC 和 TH 失败模式
-- [ ] 11.4 为打包现有项目可执行文件添加示例命令
+- [x] 11.1 记录 `haskell-bundler --exec <name> --output <path>` 用法
+- [x] 11.2 记录 MVP 支持行为、Core pruning 行为和已知限制
+- [x] 11.3 记录常见 Cabal、GHC 和 TH 失败模式
+- [x] 11.4 为打包现有项目可执行文件添加示例命令
 
 ## 12. 后续阶段验证
 
-- [ ] 12.1 MVP 展平稳定后，添加完整 Template Haskell 和 CPP 集成测试
-- [ ] 12.2 添加 `NoImplicitPrelude` / `RebindableSyntax` / Prelude 相关 fixture，决定其支持边界
-- [ ] 12.3 扩展 Core live-name 到源码声明映射，覆盖更多复杂声明形态
-- [ ] 12.4 为 `haskell-bundler` 添加确定性的自举测试
-- [ ] 12.5 验证打包输出不包含时间戳、本地路径或构建环境特定值
+- [x] 12.1 MVP 展平稳定后，添加完整 Template Haskell 和 CPP 集成测试
+- [x] 12.2 添加 `NoImplicitPrelude` / `RebindableSyntax` / Prelude 相关 fixture，决定其支持边界
+- [x] 12.3 扩展 Core live-name 到源码声明映射，覆盖更多复杂声明形态
+- [x] 12.4 为 `haskell-bundler` 添加确定性的自举测试
+- [x] 12.5 验证打包输出不包含时间戳、本地路径或构建环境特定值
 - [ ] 12.6 打包所有项目可执行文件，并独立编译每个生成文件

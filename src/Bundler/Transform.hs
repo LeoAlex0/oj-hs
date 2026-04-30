@@ -2,14 +2,15 @@
 
 module Bundler.Transform
   ( collectRenderedExternalModules
+  , collectExternalIdentifierRewrites
   , collectRenamedNames
   , renderRenamedDeclarations
   , rewriteRenamedSource
   ) where
 
 import Data.Data (Data, cast, gmapQ, gmapT)
-import Data.Char (isAlphaNum, isSpace, isUpper)
-import Data.List (isPrefixOf, nub, sort, stripPrefix)
+import Data.Char (isAlpha, isAlphaNum, isSpace, isUpper)
+import Data.List (isInfixOf, isPrefixOf, nub, sort, stripPrefix)
 import Data.Maybe (fromMaybe, maybeToList)
 import Bundler.Rename
   ( NameOrigin (ExternalName, InternalName, LocalName, WiredInName)
@@ -20,7 +21,7 @@ import Bundler.Rename
 import GHC.Data.Bag (bagToList)
 import GHC (RenamedSource)
 import GHC.Types.Name (Name, nameModule_maybe, nameOccName, tidyNameOcc)
-import GHC.Types.Name.Occurrence (OccName, mkOccName, occNameSpace)
+import GHC.Types.Name.Occurrence (OccName, mkOccName, occNameSpace, occNameString)
 import GHC.Types.Name.Reader
   ( GlobalRdrEnv
   , greDefinitionModule
@@ -55,7 +56,10 @@ rewriteRenamedSource internalModules =
 renderRenamedDeclarations :: [String] -> Maybe GlobalRdrEnv -> RenamedSource -> [String]
 renderRenamedDeclarations internalModules globalRdrEnv renamedSource =
   let (group, _imports, _exports, _docs) = rewriteRenamedSource internalModules renamedSource
-   in repairQualifiedBinderLines (lines (renderBundleSDoc internalModules globalRdrEnv (ppr group)))
+   in repairQualifiedRecordFields
+        ( repairMultilineCaseLines
+            (repairQualifiedBinderLines (lines (renderBundleSDoc internalModules globalRdrEnv (ppr group))))
+        )
 
 collectRenamedNames :: RenamedSource -> [Name]
 collectRenamedNames =
@@ -68,6 +72,24 @@ collectRenderedExternalModules internalModules globalRdrEnv renamedSource =
     | name <- collectRenamedNames renamedSource
     , qualifierModule <- maybeToList (qualifierModuleForName internalModules globalRdrEnv name)
     ]
+
+collectExternalIdentifierRewrites :: [String] -> Maybe GlobalRdrEnv -> RenamedSource -> [(String, String)]
+collectExternalIdentifierRewrites internalModules globalRdrEnv renamedSource =
+  let names = collectRenamedNames renamedSource
+      localOccurrences =
+        sort . nub $
+          [ occNameString (nameOccName name)
+          | name <- names
+          , classifyName internalModules name == LocalName
+          ]
+   in unambiguousRewrites
+        [ (occurrence, moduleNameString qualifierModule ++ "." ++ occurrence)
+        | name <- names
+        , qualifierModule <- maybeToList (qualifierModuleForName internalModules globalRdrEnv name)
+        , let occurrence = occNameString (nameOccName name)
+        , isIdentifierOccurrence occurrence
+        , occurrence `notElem` localOccurrences
+        ]
 
 rewriteName :: [String] -> Name -> Name
 rewriteName internalModules name =
@@ -100,6 +122,24 @@ collectNames value =
   case cast value of
     Just name -> [name]
     Nothing -> concat (gmapQ collectNames value)
+
+unambiguousRewrites :: [(String, String)] -> [(String, String)]
+unambiguousRewrites rewrites =
+  [ (occurrence, head targets)
+  | occurrence <- sort (nub (map fst rewrites))
+  , let targets = sort (nub [target | (candidate, target) <- rewrites, candidate == occurrence])
+  , length targets == 1
+  ]
+
+isIdentifierOccurrence :: String -> Bool
+isIdentifierOccurrence [] = False
+isIdentifierOccurrence (first : rest) =
+  (isAlpha first || first == '_')
+    && all isIdentifierOccurrenceChar rest
+
+isIdentifierOccurrenceChar :: Char -> Bool
+isIdentifierOccurrenceChar char =
+  isAlphaNum char || char == '_' || char == '\''
 
 renderBundleSDoc :: [String] -> Maybe GlobalRdrEnv -> SDoc -> String
 renderBundleSDoc internalModules globalRdrEnv =
@@ -138,7 +178,7 @@ qualifierModuleForModule internalModules globalRdrEnv nameModuleValue occNameVal
   | otherwise =
       case globalRdrEnv >>= importedModuleForName nameModuleValue occNameValue of
         Just importedModule -> Just importedModule
-        Nothing -> Nothing
+        Nothing -> Just (moduleName nameModuleValue)
 
 importedModuleForName ::
   Module ->
@@ -172,6 +212,159 @@ repairQualifiedBinderLines =
           repairQualifiedBinderLine line : go True rest
       | otherwise =
           line : go False rest
+
+repairMultilineCaseLines :: [String] -> [String]
+repairMultilineCaseLines [] = []
+repairMultilineCaseLines (line : rest)
+  | trimLeft line == "case" =
+      case break ((== "of") . trimLeft) rest of
+        (scrutineeLines@(_ : _), ofLine : remaining) ->
+          wrapCaseScrutinee line scrutineeLines ofLine ++ repairMultilineCaseLines remaining
+        _ -> line : repairMultilineCaseLines rest
+  | otherwise = line : repairMultilineCaseLines rest
+
+wrapCaseScrutinee :: String -> [String] -> String -> [String]
+wrapCaseScrutinee caseLine [] ofLine =
+  [caseLine, ofLine]
+wrapCaseScrutinee caseLine (firstScrutinee : restScrutineeLines) _ofLine =
+  case reverse restScrutineeLines of
+    [] ->
+      [caseLine ++ " (" ++ trimLeft firstScrutinee ++ ") of"]
+    lastScrutinee : reversedMiddle ->
+      (caseLine ++ " (" ++ trimLeft firstScrutinee)
+        : reverse reversedMiddle
+          ++ [lastScrutinee ++ ") of"]
+
+trimLeft :: String -> String
+trimLeft =
+  dropWhile isSpace
+
+repairQualifiedRecordFields :: [String] -> [String]
+repairQualifiedRecordFields =
+  go Nothing Nothing
+  where
+    go _ _ [] = []
+    go pendingQualifier activeQualifier (line : rest) =
+      case activeQualifier of
+        Just qualifier ->
+          let repairedLine =
+                if isRecordFieldLine line || hasRecordFieldAssignment line
+                  then qualifyRecordFieldLine qualifier line
+                  else line
+              nextActiveQualifier =
+                if "}" `isInfixOf` line then Nothing else Just qualifier
+           in repairedLine : go Nothing nextActiveQualifier rest
+        Nothing ->
+          case recordStartQualifier pendingQualifier line of
+            Just qualifier ->
+              let repairedLine = qualifyRecordFieldLine qualifier line
+                  nextActiveQualifier =
+                    if "}" `isInfixOf` line then Nothing else Just qualifier
+               in repairedLine : go Nothing nextActiveQualifier rest
+            Nothing ->
+              line : go (qualifiedConstructorModule line) Nothing rest
+
+recordStartQualifier :: Maybe String -> String -> Maybe String
+recordStartQualifier qualifier line
+  | isRecordFieldLine line = qualifier
+  | otherwise = Nothing
+
+qualifyRecordFieldLine :: String -> String -> String
+qualifyRecordFieldLine qualifier line =
+  leadingSpaces ++ repairFieldPrefix rest
+  where
+    (leadingSpaces, rest) = span isSpace line
+
+    repairFieldPrefix ('{' : afterBrace) =
+      "{" ++ qualifyFieldPrefix afterBrace
+    repairFieldPrefix (',' : afterComma) =
+      "," ++ qualifyFieldPrefix afterComma
+    repairFieldPrefix value =
+      qualifyFieldPrefix value
+
+    qualifyFieldPrefix value =
+      let (spaces, fieldAndRest) = span isSpace value
+          (fieldName, afterField) = span isRecordFieldChar fieldAndRest
+       in if shouldQualifyField fieldName afterField
+            then spaces ++ qualifier ++ "." ++ fieldName ++ afterField
+            else value
+
+shouldQualifyField :: String -> String -> Bool
+shouldQualifyField fieldName afterField =
+  not (null fieldName)
+    && not ('.' `elem` fieldName)
+    && "=" `isPrefixOf` trimLeft afterField
+
+isRecordFieldLine :: String -> Bool
+isRecordFieldLine line =
+  case trimLeft line of
+    '{' : rest -> hasRecordFieldAssignment rest
+    ',' : rest -> hasRecordFieldAssignment rest
+    _ -> False
+
+hasRecordFieldAssignment :: String -> Bool
+hasRecordFieldAssignment value =
+  let trimmed = trimLeft value
+      (fieldName, afterField) = span isRecordFieldChar trimmed
+   in not (null fieldName) && startsWithFieldAssignment afterField
+
+startsWithFieldAssignment :: String -> Bool
+startsWithFieldAssignment value =
+  case trimLeft value of
+    '=' : '=' : _ -> False
+    '=' : _ -> True
+    _ -> False
+
+qualifiedConstructorModule :: String -> Maybe String
+qualifiedConstructorModule line =
+  case [qualifier | token <- lexicalTokens line, qualifier <- maybeToList (constructorQualifier token)] of
+    [] -> Nothing
+    qualifiers -> Just (last qualifiers)
+
+constructorQualifier :: String -> Maybe String
+constructorQualifier token =
+  let segments = splitOnDot token
+   in case reverse segments of
+        constructorSegment : qualifierSegments@(_ : _)
+          | startsWithUpper constructorSegment
+          , all startsWithUpper qualifierSegments ->
+              Just (joinWithDot (reverse qualifierSegments))
+        _ -> Nothing
+
+lexicalTokens :: String -> [String]
+lexicalTokens [] = []
+lexicalTokens (char : rest)
+  | isQualifiedTokenChar char =
+      let (tokenRest, next) = span isQualifiedTokenChar rest
+       in (char : tokenRest) : lexicalTokens next
+  | otherwise = lexicalTokens rest
+
+splitOnDot :: String -> [String]
+splitOnDot value =
+  case break (== '.') value of
+    (segment, []) -> [segment]
+    (segment, _dot : rest) -> segment : splitOnDot rest
+
+joinWithDot :: [String] -> String
+joinWithDot [] = ""
+joinWithDot [value] = value
+joinWithDot (value : rest) = value ++ "." ++ joinWithDot rest
+
+startsWithUpper :: String -> Bool
+startsWithUpper (first : _) = isUpper first
+startsWithUpper [] = False
+
+isQualifiedTokenChar :: Char -> Bool
+isQualifiedTokenChar char =
+  isAlphaNum char || char == '_' || char == '\'' || char == '.'
+
+isRecordFieldChar :: Char -> Bool
+isRecordFieldChar char =
+  isAlphaNum char || char == '_' || char == '\''
+
+(<|>) :: Maybe a -> Maybe a -> Maybe a
+Just value <|> _ = Just value
+Nothing <|> other = other
 
 isTopLevelLine :: String -> Bool
 isTopLevelLine [] = False

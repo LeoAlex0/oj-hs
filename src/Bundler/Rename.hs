@@ -83,11 +83,11 @@ isGeneratedNameConflict left right =
        )
 
 generatedIdentifier :: String -> String -> NameTransform
-generatedIdentifier moduleName occurrenceName =
+generatedIdentifier sourceModuleName occurrenceName =
   NameTransform
-    { transformOriginalModule = moduleName
+    { transformOriginalModule = sourceModuleName
     , transformOriginalOccurrence = occurrenceName
-    , transformGeneratedIdentifier = generatedName moduleName occurrenceName (categoryFromSpelling occurrenceName)
+    , transformGeneratedIdentifier = generatedName sourceModuleName occurrenceName (categoryFromSpelling occurrenceName)
     }
 
 generatedIdentifierFromName :: [String] -> Name -> Maybe NameTransform
@@ -108,7 +108,7 @@ generatedIdentifierFromName internalModules name =
     _ -> Nothing
 
 generatedName :: String -> String -> GeneratedNameCategory -> String
-generatedName moduleName occurrenceName category =
+generatedName sourceModuleName occurrenceName category =
   case category of
     VarIdentifier ->
       lowerIdentifier identifierBase
@@ -120,9 +120,9 @@ generatedName moduleName occurrenceName category =
       ":!" ++ operatorBase
   where
     identifierBase =
-      sanitizeIdentifier moduleName ++ "_" ++ sanitizeIdentifier occurrenceName
+      sanitizeIdentifier sourceModuleName ++ "_" ++ sanitizeIdentifier occurrenceName
     operatorBase =
-      encodeSymbolNumber (stableHashString (moduleName ++ "\0" ++ occurrenceName))
+      encodeSymbolNumber (stableHashString (sourceModuleName ++ "\0" ++ occurrenceName))
 
 categoryFromOccName :: OccName -> GeneratedNameCategory
 categoryFromOccName occNameValue

@@ -253,7 +253,10 @@ test-suite oj-hs-test
   other-modules:
       Algorithm.KMPSpec
       Bundler.GHCSpec
+      Bundler.IntegrationSpec
+      Bundler.OptionsSpec
       Bundler.RenameSpec
+      Bundler.SourceBundleSpec
       Data.TrieSpec
       Paths_oj_hs
   autogen-modules:

@@ -221,7 +221,11 @@ isPathPrefixOf prefix path =
 normalisePath :: FilePath -> FilePath
 normalisePath value =
   let trimmed = reverse (dropWhile (== '/') (reverse value))
-   in if null trimmed then "/" else trimmed
+   in if null trimmed
+        then "/"
+        else if trimmed == "."
+          then ""
+          else trimmed
 
 isPrefixOfString :: String -> String -> Bool
 isPrefixOfString [] _ = True
