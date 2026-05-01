@@ -1,7 +1,8 @@
 {-# LANGUAGE RankNTypes #-}
 
 module Bundler.Transform
-  ( collectRenderedExternalModules
+  ( ExternalImport (..)
+  , collectRenderedExternalImports
   , collectExternalIdentifierRewrites
   , collectRenamedNames
   , renderRenamedDeclarations
@@ -9,7 +10,7 @@ module Bundler.Transform
   ) where
 
 import Data.Data (Data, cast, gmapQ, gmapT)
-import Data.Char (isAlpha, isAlphaNum, isSpace, isUpper)
+import Data.Char (isAlpha, isAlphaNum, isDigit, isSpace, isUpper)
 import Data.List (isInfixOf, isPrefixOf, nub, sort, stripPrefix)
 import Data.Maybe (fromMaybe, maybeToList)
 import Bundler.Rename
@@ -30,7 +31,7 @@ import GHC.Types.Name.Reader
   , is_mod
   , lookupGlobalRdrEnv
   )
-import GHC.Unit.Types (Module, moduleName)
+import GHC.Unit.Types (Module, moduleName, moduleUnitId, unitIdString)
 import GHC.Utils.Outputable
   ( Depth (AllTheWay)
   , NamePprCtx (QueryQualify)
@@ -47,34 +48,97 @@ import GHC.Utils.Outputable
   , showSDocUnsafe
   , withUserStyle
   )
-import Language.Haskell.Syntax.Module.Name (ModuleName, mkModuleName, moduleNameString)
+import Language.Haskell.Syntax.Module.Name (ModuleName, moduleNameString)
+
+data ExternalImport = ExternalImport
+  { externalImportPackage :: Maybe String
+  , externalImportModule :: String
+  }
+  deriving (Eq, Ord, Show)
 
 rewriteRenamedSource :: [String] -> RenamedSource -> RenamedSource
 rewriteRenamedSource internalModules =
   rewriteData (rewriteName internalModules)
 
-renderRenamedDeclarations :: [String] -> Maybe GlobalRdrEnv -> RenamedSource -> [String]
-renderRenamedDeclarations internalModules globalRdrEnv renamedSource =
+renderRenamedDeclarations :: [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> RenamedSource -> [String]
+renderRenamedDeclarations internalModules internalGlobalRdrEnvs globalRdrEnv renamedSource =
   let (group, _imports, _exports, _docs) = rewriteRenamedSource internalModules renamedSource
    in repairQualifiedRecordFields
         ( repairMultilineCaseLines
-            (repairQualifiedBinderLines (lines (renderBundleSDoc internalModules globalRdrEnv (ppr group))))
+            (repairQualifiedBinderLines (lines (renderBundleSDoc internalModules internalGlobalRdrEnvs globalRdrEnv (ppr group))))
         )
 
 collectRenamedNames :: RenamedSource -> [Name]
 collectRenamedNames =
   collectNames
 
-collectRenderedExternalModules :: [String] -> Maybe GlobalRdrEnv -> RenamedSource -> [String]
-collectRenderedExternalModules internalModules globalRdrEnv renamedSource =
+collectRenderedExternalImports :: [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> RenamedSource -> [ExternalImport]
+collectRenderedExternalImports internalModules internalGlobalRdrEnvs globalRdrEnv renamedSource =
   sort . nub $
-    [ moduleNameString qualifierModule
+    [ ExternalImport
+        { externalImportPackage = externalImportPackageForQualifier nameModuleValue qualifierModule
+        , externalImportModule = moduleNameString qualifierModule
+        }
     | name <- collectRenamedNames renamedSource
-    , qualifierModule <- maybeToList (qualifierModuleForName internalModules globalRdrEnv name)
+    , nameModuleValue <- maybeToList (nameModule_maybe name)
+    , qualifierModule <- maybeToList (qualifierModuleForName internalModules internalGlobalRdrEnvs globalRdrEnv name)
     ]
 
-collectExternalIdentifierRewrites :: [String] -> Maybe GlobalRdrEnv -> RenamedSource -> [(String, String)]
-collectExternalIdentifierRewrites internalModules globalRdrEnv renamedSource =
+externalImportPackageForQualifier :: Module -> ModuleName -> Maybe String
+externalImportPackageForQualifier nameModuleValue qualifierModule
+  | moduleNameString qualifierModule == moduleNameString (moduleName nameModuleValue) =
+      packageNameFromUnitId (unitIdString (moduleUnitId nameModuleValue))
+  | otherwise = Nothing
+
+packageNameFromUnitId :: String -> Maybe String
+packageNameFromUnitId unitIdValue =
+  case candidatePackageNames unitIdValue of
+    packageName : _
+      | validPackageImportName packageName -> Just packageName
+    []
+      | validPackageImportName unitIdValue && unitIdValue `notElem` nonPackageUnitIds ->
+          Just unitIdValue
+    _ -> Nothing
+
+nonPackageUnitIds :: [String]
+nonPackageUnitIds =
+  ["main", "interactive"]
+
+candidatePackageNames :: String -> [String]
+candidatePackageNames unitIdValue =
+  reverse
+    [ prefix
+    | (prefix, suffix) <- splitBeforeHyphens unitIdValue
+    , startsWithVersion suffix
+    ]
+
+splitBeforeHyphens :: String -> [(String, String)]
+splitBeforeHyphens value =
+  go [] value
+  where
+    go _ [] = []
+    go reversedPrefix ('-' : suffix) =
+      (reverse reversedPrefix, suffix) : go ('-' : reversedPrefix) suffix
+    go reversedPrefix (char : rest) =
+      go (char : reversedPrefix) rest
+
+startsWithVersion :: String -> Bool
+startsWithVersion value =
+  case span (\char -> isDigit char || char == '.') value of
+    (versionPrefix, _) ->
+      any isDigit versionPrefix && '.' `elem` versionPrefix
+
+validPackageImportName :: String -> Bool
+validPackageImportName [] = False
+validPackageImportName value =
+  all validPackageImportChar value
+
+validPackageImportChar :: Char -> Bool
+validPackageImportChar char =
+  isAlphaNum char || char == '-'
+
+collectExternalIdentifierRewrites :: [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> RenamedSource -> [(String, String)]
+collectExternalIdentifierRewrites internalModules internalGlobalRdrEnvs globalRdrEnv renamedSource =
   let names = collectRenamedNames renamedSource
       localOccurrences =
         sort . nub $
@@ -85,7 +149,7 @@ collectExternalIdentifierRewrites internalModules globalRdrEnv renamedSource =
    in unambiguousRewrites
         [ (occurrence, moduleNameString qualifierModule ++ "." ++ occurrence)
         | name <- names
-        , qualifierModule <- maybeToList (qualifierModuleForName internalModules globalRdrEnv name)
+        , qualifierModule <- maybeToList (qualifierModuleForName internalModules internalGlobalRdrEnvs globalRdrEnv name)
         , let occurrence = occNameString (nameOccName name)
         , isIdentifierOccurrence occurrence
         , occurrence `notElem` localOccurrences
@@ -141,22 +205,22 @@ isIdentifierOccurrenceChar :: Char -> Bool
 isIdentifierOccurrenceChar char =
   isAlphaNum char || char == '_' || char == '\''
 
-renderBundleSDoc :: [String] -> Maybe GlobalRdrEnv -> SDoc -> String
-renderBundleSDoc internalModules globalRdrEnv =
-  showSDocUnsafe . withUserStyle (bundleNamePprCtx internalModules globalRdrEnv) AllTheWay
+renderBundleSDoc :: [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> SDoc -> String
+renderBundleSDoc internalModules internalGlobalRdrEnvs globalRdrEnv =
+  showSDocUnsafe . withUserStyle (bundleNamePprCtx internalModules internalGlobalRdrEnvs globalRdrEnv) AllTheWay
 
-bundleNamePprCtx :: [String] -> Maybe GlobalRdrEnv -> NamePprCtx
-bundleNamePprCtx internalModules globalRdrEnv =
+bundleNamePprCtx :: [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> NamePprCtx
+bundleNamePprCtx internalModules internalGlobalRdrEnvs globalRdrEnv =
   QueryQualify
     { queryQualifyName = \nameModuleValue occNameValue ->
-        maybe NameUnqual NameQual (qualifierModuleForModule internalModules globalRdrEnv nameModuleValue occNameValue)
+        maybe NameUnqual NameQual (qualifierModuleForModule internalModules internalGlobalRdrEnvs globalRdrEnv nameModuleValue occNameValue)
     , queryQualifyModule = alwaysQualifyModules
     , queryQualifyPackage = neverQualifyPackages
     , queryPromotionTick = queryPromotionTick neverQualify
     }
 
-qualifierModuleForName :: [String] -> Maybe GlobalRdrEnv -> Name -> Maybe ModuleName
-qualifierModuleForName internalModules globalRdrEnv name =
+qualifierModuleForName :: [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> Name -> Maybe ModuleName
+qualifierModuleForName internalModules internalGlobalRdrEnvs globalRdrEnv name =
   case classifyName internalModules name of
     InternalName _ -> Nothing
     LocalName -> Nothing
@@ -165,35 +229,71 @@ qualifierModuleForName internalModules globalRdrEnv name =
       case nameModule_maybe name of
         Nothing -> Nothing
         Just nameModuleValue ->
-          qualifierModuleForModule internalModules globalRdrEnv nameModuleValue (nameOccName name)
+          qualifierModuleForModule internalModules internalGlobalRdrEnvs globalRdrEnv nameModuleValue (nameOccName name)
 
 qualifierModuleForModule ::
   [String] ->
+  [(String, GlobalRdrEnv)] ->
   Maybe GlobalRdrEnv ->
   Module ->
   OccName ->
   Maybe ModuleName
-qualifierModuleForModule internalModules globalRdrEnv nameModuleValue occNameValue
-  | moduleNameString (moduleName nameModuleValue) `elem` internalModules = Nothing
-  | moduleNameString (moduleName nameModuleValue) == "GHC.Maybe" = Just (mkModuleName "Prelude")
-  | "RIO.Prelude." `isPrefixOf` moduleNameString (moduleName nameModuleValue) = Just (mkModuleName "RIO")
+qualifierModuleForModule internalModules internalGlobalRdrEnvs globalRdrEnv nameModuleValue occNameValue
+  | moduleNameString definingModule `elem` internalModules = Nothing
   | otherwise =
-      case globalRdrEnv >>= importedModuleForName nameModuleValue occNameValue of
-        Just importedModule
-          | moduleNameString importedModule `elem` internalModules -> Just (moduleName nameModuleValue)
-          | otherwise -> Just importedModule
-        Nothing -> Just (moduleName nameModuleValue)
+      case resolveImportedQualifier internalModules internalGlobalRdrEnvs nameModuleValue occNameValue [] globalRdrEnv of
+        Just importedModule -> Just importedModule
+        Nothing -> Just definingModule
+  where
+    definingModule = moduleName nameModuleValue
 
-importedModuleForName ::
+resolveImportedQualifier ::
+  [String] ->
+  [(String, GlobalRdrEnv)] ->
+  Module ->
+  OccName ->
+  [String] ->
+  Maybe GlobalRdrEnv ->
+  Maybe ModuleName
+resolveImportedQualifier _ _ _ _ _ Nothing = Nothing
+resolveImportedQualifier internalModules internalGlobalRdrEnvs nameModuleValue occNameValue seen (Just globalRdrEnv) =
+  case firstExternalModule candidateModules of
+    Just externalModule -> Just externalModule
+    Nothing ->
+      firstJust
+        [ resolveImportedQualifier
+            internalModules
+            internalGlobalRdrEnvs
+            nameModuleValue
+            occNameValue
+            (moduleNameString internalModule : seen)
+            (lookup (moduleNameString internalModule) internalGlobalRdrEnvs)
+        | internalModule <- candidateModules
+        , let internalModuleName = moduleNameString internalModule
+        , internalModuleName `elem` internalModules
+        , internalModuleName `notElem` seen
+        ]
+  where
+    candidateModules = importedModulesForName nameModuleValue occNameValue globalRdrEnv
+
+    firstExternalModule modules =
+      case sort (nub [moduleNameString candidate | candidate <- modules, moduleNameString candidate `notElem` internalModules]) of
+        [] -> Nothing
+        firstModuleName : _ ->
+          Just (head [candidate | candidate <- modules, moduleNameString candidate == firstModuleName])
+
+importedModulesForName ::
   Module ->
   OccName ->
   GlobalRdrEnv ->
-  Maybe ModuleName
-importedModuleForName nameModuleValue occNameValue globalRdrEnv =
+  [ModuleName]
+importedModulesForName nameModuleValue occNameValue globalRdrEnv =
   case sort (nub (map moduleNameString candidateModules)) of
-    [] -> Nothing
-    firstModuleName : _ ->
-      Just (head [candidate | candidate <- candidateModules, moduleNameString candidate == firstModuleName])
+    [] -> []
+    moduleNames ->
+      [ head [candidate | candidate <- candidateModules, moduleNameString candidate == moduleNameValue]
+      | moduleNameValue <- moduleNames
+      ]
   where
     candidateModules =
       [ is_mod (is_decl importSpec)
@@ -201,6 +301,11 @@ importedModuleForName nameModuleValue occNameValue globalRdrEnv =
       , greDefinitionModule gre == Just nameModuleValue
       , importSpec <- bagToList (gre_imp gre)
       ]
+
+firstJust :: [Maybe a] -> Maybe a
+firstJust [] = Nothing
+firstJust (Just value : _) = Just value
+firstJust (Nothing : rest) = firstJust rest
 
 repairQualifiedBinderLines :: [String] -> [String]
 repairQualifiedBinderLines =

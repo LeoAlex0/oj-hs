@@ -6,11 +6,11 @@ module Bundler.GHC
   , resolveGhcLibDir
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (SomeException, bracket, try)
 import Control.Monad.IO.Class (liftIO)
 import Data.Char (isSpace)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
-import Data.List (isInfixOf, nub)
+import Data.List (intercalate, nub)
 import Data.Maybe (mapMaybe)
 import Bundler.Cabal (ExecutableInfo (..), PackageInfo (..))
 import Bundler.Error (BundleError (..))
@@ -56,9 +56,10 @@ import GHC.Unit.Module.Graph
 import GHC.Unit.Module.Location (ml_hs_file)
 import GHC.Utils.Logger (LogAction, getLogger, log_default_user_context)
 import GHC.Utils.Outputable (renderWithContext)
-import System.Directory (doesDirectoryExist, listDirectory)
+import System.Directory (createDirectory, getTemporaryDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
-import System.FilePath ((</>), takeDirectory, takeFileName)
+import System.FilePath ((</>))
+import System.IO (hClose, openTempFile)
 import System.Process (readProcess)
 
 newtype GhcConfig = GhcConfig
@@ -85,6 +86,7 @@ instance Show LoadedGhcModules where
 data LoadedModule = LoadedModule
   { loadedModuleName :: String
   , loadedModuleFile :: Maybe FilePath
+  , loadedModuleSource :: Maybe String
   , loadedModuleIsInternal :: Bool
   , loadedGlobalRdrEnv :: Maybe GlobalRdrEnv
   , loadedRenamedSource :: Maybe RenamedSource
@@ -97,6 +99,8 @@ instance Show LoadedModule where
       ++ show (loadedModuleName loaded)
       ++ ", loadedModuleFile = "
       ++ show (loadedModuleFile loaded)
+      ++ ", loadedModuleSource = "
+      ++ show (maybe False (const True) (loadedModuleSource loaded))
       ++ ", loadedModuleIsInternal = "
       ++ show (loadedModuleIsInternal loaded)
       ++ ", loadedGlobalRdrEnv = "
@@ -113,7 +117,9 @@ loadExecutableModules packageInfo executableInfo = do
   case libDirResult of
     Left message -> pure (Left (GhcSessionFailed message))
     Right libDir -> do
-      loaded <- try (runGhc (Just libDir) (loadInSession packageInfo executableInfo libDir))
+      loaded <-
+        withSyntheticPathsModule packageInfo $ \syntheticSourceDirs ->
+          try (runGhc (Just libDir) (loadInSession packageInfo executableInfo libDir syntheticSourceDirs))
       case loaded of
         Left err -> pure (Left (GhcLoadFailed (show (err :: SomeException))))
         Right result -> pure result
@@ -132,15 +138,14 @@ resolveGhcLibDir = do
 trim :: String -> String
 trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace
 
-loadInSession :: PackageInfo -> ExecutableInfo -> FilePath -> Ghc (Either BundleError LoadedGhcModules)
-loadInSession packageInfo executableInfo libDir = do
+loadInSession :: PackageInfo -> ExecutableInfo -> FilePath -> [FilePath] -> Ghc (Either BundleError LoadedGhcModules)
+loadInSession packageInfo executableInfo libDir syntheticSourceDirs = do
   diagnosticsRef <- liftIO (newIORef [])
   pushLogHookM (captureDiagnostics diagnosticsRef)
   dflags0 <- getSessionDynFlags
   logger <- getLogger
-  autogenSourceDirs <- liftIO (findAutogenSourceDirs packageInfo executableInfo)
   let allSourceDirs =
-        nub (executableSourceDirs executableInfo ++ packageLibrarySourceDirs packageInfo ++ autogenSourceDirs)
+        nub (syntheticSourceDirs ++ executableSourceDirs executableInfo ++ packageLibrarySourceDirs packageInfo)
       arguments = ghcArguments packageInfo executableInfo allSourceDirs
   (dflags1, leftovers, _warnings) <- parseDynamicFlags logger dflags0 (map noLoc arguments)
   if not (null leftovers)
@@ -195,58 +200,102 @@ ghcArguments packageInfo executableInfo sourceDirs =
     packageArgs =
       concatMap
         (\packageNameValue -> ["-package", packageNameValue])
-        (filter (/= packageName packageInfo) (nub (executableDependencyPackageNames executableInfo)))
+        ( filter
+            (/= packageName packageInfo)
+            ( nub
+                ( executableDependencyPackageNames executableInfo
+                    ++ packageLibraryDependencyPackageNames packageInfo
+                )
+            )
+        )
     extensionArgs =
       map ("-X" ++) (executableDefaultExtensions executableInfo)
 
-findAutogenSourceDirs :: PackageInfo -> ExecutableInfo -> IO [FilePath]
-findAutogenSourceDirs packageInfo executableInfo = do
-  let buildRoot = packageRoot packageInfo </> "dist-newstyle" </> "build"
-  exists <- doesDirectoryExist buildRoot
-  if not exists
-    then pure []
-    else do
-      dirs <- collectDirectories 8 buildRoot
-      pure
-        [ dir
-        | dir <- dirs
-        , takeFileName dir == "autogen"
-        , packageDisplayName packageInfo `isInfixOf` dir
-        , takeFileName (takeDirectory dir) `elem` ["build", executableName executableInfo]
-        ]
+withSyntheticPathsModule :: PackageInfo -> ([FilePath] -> IO a) -> IO a
+withSyntheticPathsModule packageInfo action =
+  bracket
+    (createSyntheticPathsModule packageInfo)
+    removePathForcibly
+    (\directory -> action [directory])
 
-collectDirectories :: Int -> FilePath -> IO [FilePath]
-collectDirectories depth root
-  | depth <= 0 = pure []
-  | otherwise = do
-      exists <- doesDirectoryExist root
-      if not exists
-        then pure []
-        else do
-          entries <- listDirectory root
-          let paths = map (root </>) entries
-          childDirs <- filterMDirectory paths
-          nested <- mapM (collectDirectories (depth - 1)) childDirs
-          pure (childDirs ++ concat nested)
+createSyntheticPathsModule :: PackageInfo -> IO FilePath
+createSyntheticPathsModule packageInfo = do
+  directory <- createTempDirectoryFromSystem "oj-hs-bundler-paths"
+  writeFile
+    (directory </> (packagePathsModuleName packageInfo ++ ".hs"))
+    (renderSyntheticPathsModule packageInfo)
+  pure directory
 
-filterMDirectory :: [FilePath] -> IO [FilePath]
-filterMDirectory [] = pure []
-filterMDirectory (path : rest) = do
-  isDirectory <- doesDirectoryExist path
-  remaining <- filterMDirectory rest
-  pure ([path | isDirectory] ++ remaining)
+createTempDirectoryFromSystem :: String -> IO FilePath
+createTempDirectoryFromSystem template = do
+  tmp <- getTemporaryDirectory
+  (path, handle) <- openTempFile tmp template
+  hClose handle
+  removeFile path
+  createDirectory path
+  pure path
+
+renderSyntheticPathsModule :: PackageInfo -> String
+renderSyntheticPathsModule packageInfo =
+  unlines
+    [ "module " ++ packagePathsModuleName packageInfo
+    , "  ( version"
+    , "  , getBinDir"
+    , "  , getLibDir"
+    , "  , getDynLibDir"
+    , "  , getDataDir"
+    , "  , getLibexecDir"
+    , "  , getSysconfDir"
+    , "  , getDataFileName"
+    , "  ) where"
+    , ""
+    , "import Data.Version (Version(..))"
+    , "import qualified Prelude"
+    , ""
+    , "version :: Version"
+    , "version = Version " ++ renderVersionNumbers (packageVersionNumbers packageInfo) ++ " []"
+    , ""
+    , "getBinDir :: Prelude.IO Prelude.FilePath"
+    , "getBinDir = Prelude.pure \".\""
+    , ""
+    , "getLibDir :: Prelude.IO Prelude.FilePath"
+    , "getLibDir = Prelude.pure \".\""
+    , ""
+    , "getDynLibDir :: Prelude.IO Prelude.FilePath"
+    , "getDynLibDir = Prelude.pure \".\""
+    , ""
+    , "getDataDir :: Prelude.IO Prelude.FilePath"
+    , "getDataDir = Prelude.pure \".\""
+    , ""
+    , "getLibexecDir :: Prelude.IO Prelude.FilePath"
+    , "getLibexecDir = Prelude.pure \".\""
+    , ""
+    , "getSysconfDir :: Prelude.IO Prelude.FilePath"
+    , "getSysconfDir = Prelude.pure \".\""
+    , ""
+    , "getDataFileName :: Prelude.FilePath -> Prelude.IO Prelude.FilePath"
+    , "getDataFileName name = Prelude.pure name"
+    ]
+
+renderVersionNumbers :: [Int] -> String
+renderVersionNumbers [] = "[0]"
+renderVersionNumbers numbers =
+  "[" ++ intercalate ", " (map show numbers) ++ "]"
 
 toLoadedModule :: [FilePath] -> ModSummary -> Ghc LoadedModule
 toLoadedModule sourceDirs summary = do
   parsed <- parseModule summary
   typechecked <- typecheckModule parsed
   let info = moduleInfo typechecked
+      sourceFile = ml_hs_file (ms_location summary)
+  source <- liftIO (traverse readFile sourceFile)
   pure
     LoadedModule
       { loadedModuleName = moduleNameString (ms_mod_name summary)
-      , loadedModuleFile = ml_hs_file (ms_location summary)
+      , loadedModuleFile = sourceFile
+      , loadedModuleSource = source
       , loadedModuleIsInternal =
-          case ml_hs_file (ms_location summary) of
+          case sourceFile of
             Nothing -> False
             Just filePath -> any (`isPathPrefixOf` filePath) sourceDirs
       , loadedGlobalRdrEnv = modInfoRdrEnv info

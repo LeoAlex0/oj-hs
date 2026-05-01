@@ -59,7 +59,7 @@
 - 使用 GHC `ModuleGraph` 和 GHC 解析后的 `Name` 信息作为模块和符号事实来源。
 - 将可达内部模块展平为单个显式只导出 `main` 的 `Main` 模块，并生成可独立编译的源码。
 - 对内部符号进行确定性重命名，避免展平后的顶层命名冲突，并保持原 occurrence 的 Haskell 词法类别。
-- 对普通外部包引用使用完整模块路径 qualified 形式，统一生成无 alias 的 `import qualified <Full.Module.Name>`。
+- 对普通外部包引用使用完整模块路径 qualified 形式，统一生成无 alias 的 qualified import；当编译环境中存在同名外部模块时，使用 package-qualified import 消歧。
 - 从 MVP 开始对展平后的候选 `Main` 分析模块接入 GHC Core 简化管线，使用 Core live bindings 完成可达性分析和源码声明裁剪。
 
 **Non-Goals:**
@@ -124,7 +124,7 @@
 
 ### DD-6: 外部引用统一为完整模块路径 qualified
 
-**决策**：普通外部模块 import 输出为 `import qualified <Full.Module.Name>`，引用渲染为 `<Full.Module.Name>.<symbol>`，不生成 alias。
+**决策**：普通外部模块 import 输出为 `import qualified <Full.Module.Name>`，引用渲染为 `<Full.Module.Name>.<symbol>`，不生成 alias。当 GHC `Name` 的定义模块来自外部包，且最终源码可能在暴露多个同名模块的环境中编译时，import 应带 package qualifier，例如 `import qualified "ghc" GHC.Core`，并为输出启用 `PackageImports`。
 
 **理由**：完整模块路径天然区分 `Data.Map`、`Data.Map.Strict`、`Data.Vector` 等模块，避免 alias 分配和冲突管理。
 
@@ -144,7 +144,7 @@
 
 ### DD-8: TH/CPP 由 GHC 执行，Bundler 只接收结果和错误
 
-**决策**：CPP 和 Template Haskell 不做自定义处理。CPP 在 GHC parse 前完成；TH 在 GHC typecheck 时执行。Bundler 记录 GHC 输出，并透传失败诊断。
+**决策**：CPP 和 Template Haskell 不做自定义处理。CPP 在 GHC parse 前完成；TH 在 GHC typecheck 时执行。Bundler 记录 GHC 输出，并透传失败诊断。若 TH 展开结果本身包含构建环境信息，该信息属于用户代码在当前 GHC 会话中的语义结果，Bundler 不额外清洗或替换。
 
 **理由**：TH/CPP 语义依赖编译环境、flags 和包依赖，只有 GHC session 能正确处理。
 
@@ -212,7 +212,7 @@ Target
   }
 ```
 
-候选源码必须从 `module Main (main) where` 开始。`targetContents` 里的 path 和 timestamp 只用于 GHC 诊断、缓存和 source location；最终输出不得包含时间戳、临时路径或本地 store path。
+候选源码必须从 `module Main (main) where` 开始。`targetContents` 里的 path 和 timestamp 只用于 GHC 诊断、缓存和 source location；最终输出不得包含 bundler 自身为候选模块或临时源文件额外引入的时间戳、临时路径或本地 store path。用户源码、CPP 或 TH 展开明确生成的环境值应按 GHC 结果保留。
 
 ## Risks / Trade-offs
 

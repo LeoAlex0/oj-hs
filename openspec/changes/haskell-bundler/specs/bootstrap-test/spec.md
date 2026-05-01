@@ -30,9 +30,10 @@
 - **WHEN** 系统输出 modules、declarations、imports 或 generated names
 - **THEN** 输出顺序在多次运行之间保持确定
 
-#### Scenario: 避免构建环境特定输出
+#### Scenario: 避免 bundler 额外引入构建环境特定输出
 - **WHEN** 系统生成打包源码
-- **THEN** 输出不包含 timestamps、temporary paths、local store paths 或其他构建环境特定值
+- **THEN** 输出不包含 bundler 自身分析、候选模块加载或临时文件处理额外引入的 timestamps、temporary paths、local store paths 或其他构建环境特定值
+- **AND** 如果用户源码、CPP 或 Template Haskell 展开结果本身明确生成环境相关值，系统保留该语义结果而不擅自清洗或替换
 
 ### Requirement: Bootstrap 测试是后续阶段验证目标
 

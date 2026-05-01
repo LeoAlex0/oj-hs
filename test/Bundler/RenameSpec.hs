@@ -7,7 +7,7 @@ import Bundler.Rename
   )
 import Data.Char (isLower, isUpper)
 import Data.Maybe (isJust)
-import System.Directory (removeFile)
+import System.Directory (getTemporaryDirectory, removeFile)
 import System.Exit (ExitCode (ExitSuccess))
 import System.IO (hClose, hPutStr, openTempFile)
 import System.Process (readProcessWithExitCode)
@@ -77,7 +77,8 @@ isOperatorChar char =
 
 compileHaskellSource :: String -> IO ()
 compileHaskellSource source = do
-  (path, handle) <- openTempFile "/tmp" "oj-hs-rename-fixity.hs"
+  tmp <- getTemporaryDirectory
+  (path, handle) <- openTempFile tmp "oj-hs-rename-fixity.hs"
   hPutStr handle source
   hClose handle
   (exitCode, _stdout, stderr) <-

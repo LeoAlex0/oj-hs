@@ -105,5 +105,5 @@
 - [x] 12.2 添加 `NoImplicitPrelude` / `RebindableSyntax` / Prelude 相关 fixture，决定其支持边界
 - [x] 12.3 扩展 Core live-name 到源码声明映射，覆盖更多复杂声明形态
 - [x] 12.4 为 `haskell-bundler` 添加确定性的自举测试
-- [x] 12.5 验证打包输出不包含时间戳、本地路径或构建环境特定值
+- [x] 12.5 验证打包输出不额外引入 bundler 自身的时间戳、本地路径或构建环境特定值
 - [x] 12.6 打包所有项目可执行文件，并独立编译每个生成文件

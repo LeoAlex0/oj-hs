@@ -24,13 +24,14 @@ import Distribution.PackageDescription
   , package
   , targetBuildDepends
   )
-import Distribution.Package (pkgName)
+import Distribution.Package (pkgName, pkgVersion)
 import Distribution.PackageDescription.Configuration (flattenPackageDescription)
 import Distribution.Pretty (prettyShow)
 import Distribution.Simple.PackageDescription (readGenericPackageDescription)
 import Distribution.Types.Dependency (depPkgName)
 import Distribution.Types.PackageName (unPackageName)
 import Distribution.Types.UnqualComponentName (unUnqualComponentName)
+import Distribution.Types.Version (versionNumbers)
 import Distribution.Utils.Path (getSymbolicPath)
 import Distribution.Verbosity (silent)
 import Bundler.Error (BundleError (..))
@@ -42,7 +43,10 @@ data PackageInfo = PackageInfo
   , packageCabalFile :: FilePath
   , packageName :: String
   , packageDisplayName :: String
+  , packagePathsModuleName :: String
+  , packageVersionNumbers :: [Int]
   , packageLibrarySourceDirs :: [FilePath]
+  , packageLibraryDependencyPackageNames :: [String]
   , packageExecutables :: [ExecutableInfo]
   }
   deriving (Eq, Show)
@@ -98,10 +102,15 @@ readOneCabalFile packageDir cabalFile = do
     Right genericPackageDescription -> do
       let packageDescription = flattenPackageDescription genericPackageDescription
           packageIdentifier = package packageDescription
+          packageNameValue = unPackageName (pkgName packageIdentifier)
           librarySourceDirs =
             case library packageDescription of
               Nothing -> []
               Just packageLibrary -> sourceDirectories packageDir (libBuildInfo packageLibrary)
+          libraryDependencyPackageNames =
+            case library packageDescription of
+              Nothing -> []
+              Just packageLibrary -> dependencyPackageNames (libBuildInfo packageLibrary)
           executableOrder =
             map (unUnqualComponentName . fst) (condExecutables genericPackageDescription)
           allExecutables =
@@ -112,9 +121,12 @@ readOneCabalFile packageDir cabalFile = do
             PackageInfo
               { packageRoot = packageDir
               , packageCabalFile = cabalFile
-              , packageName = unPackageName (pkgName packageIdentifier)
+              , packageName = packageNameValue
               , packageDisplayName = prettyShow packageIdentifier
+              , packagePathsModuleName = pathsModuleNameForPackage packageNameValue
+              , packageVersionNumbers = versionNumbers (pkgVersion packageIdentifier)
               , packageLibrarySourceDirs = librarySourceDirs
+              , packageLibraryDependencyPackageNames = libraryDependencyPackageNames
               , packageExecutables = allExecutables
               }
         )
@@ -132,11 +144,22 @@ toExecutableInfo packageDir executable =
         , executableMainPath = mainPath
         , executableSourceDirs = sourceDirs
         , executableDependencies = map prettyShow (targetBuildDepends info)
-        , executableDependencyPackageNames =
-            map (unPackageName . depPkgName) (targetBuildDepends info)
+        , executableDependencyPackageNames = dependencyPackageNames info
         , executableDefaultExtensions = map prettyShow (defaultExtensions info)
         , executableCompilerOptions = ghcCompilerOptions info
         }
+
+dependencyPackageNames :: BuildInfo -> [String]
+dependencyPackageNames info =
+  map (unPackageName . depPkgName) (targetBuildDepends info)
+
+pathsModuleNameForPackage :: String -> String
+pathsModuleNameForPackage packageNameValue =
+  "Paths_" ++ map packageNameModuleChar packageNameValue
+
+packageNameModuleChar :: Char -> Char
+packageNameModuleChar '-' = '_'
+packageNameModuleChar char = char
 
 sourceDirectories :: FilePath -> BuildInfo -> [FilePath]
 sourceDirectories packageDir info =

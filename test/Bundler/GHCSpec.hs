@@ -105,7 +105,10 @@ packageInfo packageDir =
     , packageCabalFile = packageDir </> "fixture.cabal"
     , packageName = "fixture"
     , packageDisplayName = "fixture-0.0.0.0"
+    , packagePathsModuleName = "Paths_fixture"
+    , packageVersionNumbers = [0, 0, 0, 0]
     , packageLibrarySourceDirs = []
+    , packageLibraryDependencyPackageNames = []
     , packageExecutables = []
     }
 

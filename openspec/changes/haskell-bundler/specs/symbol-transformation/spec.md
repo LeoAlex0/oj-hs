@@ -39,6 +39,12 @@
 - **WHEN** 变换后的代码引用某个 `Name`，且其定义模块未被作为内部模块打包
 - **THEN** 系统为该模块输出 `import qualified <Full.Module.Name>`
 
+#### Scenario: 区分不同包中的同名外部模块
+- **WHEN** 编译环境中多个外部包暴露同一个模块名
+- **AND** 变换后的代码引用其中一个包里的该模块
+- **THEN** 系统为对应 import 输出 package-qualified import
+- **AND** 生成源码启用 `PackageImports`
+
 #### Scenario: 限定原本非限定的外部引用
 - **WHEN** 变换后的代码引用原本以非限定形式 import 的外部 `Name`
 - **THEN** 系统将该引用渲染为 `<Full.Module.Name>.<symbol>`

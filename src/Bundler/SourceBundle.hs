@@ -8,7 +8,7 @@ import Data.Maybe (maybeToList)
 import qualified Data.Set as Set
 import Bundler.Cabal (ExecutableInfo (..), PackageInfo)
 import Bundler.DCE (CoreLiveSet (..), analyzeCoreLiveSet)
-import Bundler.Error (BundleError (SourceBundleFailed, SymbolConflict))
+import Bundler.Error (BundleError (GhcLoadFailed, SourceBundleFailed, SymbolConflict))
 import Bundler.GHC (LoadedGhcModules (..), LoadedModule (..))
 import Bundler.Rename
   ( NameTransform
@@ -18,13 +18,15 @@ import Bundler.Rename
   , transformOriginalOccurrence
   )
 import Bundler.Transform
-  ( collectRenderedExternalModules
+  ( ExternalImport (..)
+  , collectRenderedExternalImports
   , collectExternalIdentifierRewrites
   , collectRenamedNames
   , renderRenamedDeclarations
   )
 import GHC.Types.Name (Name, nameOccName)
 import GHC.Types.Name.Occurrence (NameSpace, occNameSpace, occNameString)
+import GHC.Types.Name.Reader (GlobalRdrEnv)
 
 data SourceModule = SourceModule
   { sourceModuleName :: String
@@ -59,63 +61,98 @@ generateSourceBundle ::
 generateSourceBundle _packageInfo executableInfo loaded = do
   let internalModules = filter loadedModuleIsInternal (loadedModules loaded)
       internalNames = map loadedModuleName internalModules
+      internalGlobalRdrEnvs = loadedInternalGlobalRdrEnvs internalModules
       emittedModules = filter shouldEmitModule internalModules
   case findGeneratedNameConflict internalNames emittedModules of
     Just (left, right) -> pure (Left (SymbolConflict left right))
     Nothing -> do
-      parsedModules <- traverse (readSourceModule internalNames) emittedModules
+      parsedModules <- traverse (readSourceModule internalNames internalGlobalRdrEnvs) emittedModules
       case sequence parsedModules of
         Left message -> pure (Left (SourceBundleFailed message))
         Right sourceModules ->
           case findEntryBinding internalNames emittedModules of
             Left message -> pure (Left (SourceBundleFailed message))
             Right entryBinding ->
-              let externalImports = "Prelude" : collectBundleExternalModules internalNames emittedModules
-                  candidateSource = renderBundleSource executableInfo externalImports entryBinding sourceModules
+              let externalImports =
+                    uniqueExternalImports
+                      (ExternalImport Nothing "Prelude" : collectBundleExternalImports internalNames internalGlobalRdrEnvs emittedModules)
                in do
-                    liveSetResult <-
-                      analyzeCoreLiveSet
-                        (loadedGhcConfig loaded)
-                        (loadedGhcArguments loaded)
-                        candidateSource
-                    case liveSetResult of
-                      Left err -> pure (Left err)
-                      Right liveSet ->
-                        let prunedModules = pruneSourceModules liveSet entryBinding sourceModules
-                            prunedSource = renderBundleSource executableInfo externalImports entryBinding prunedModules
-                         in pure (Right prunedSource)
+                    result <- analyzeAndRenderBundle loaded executableInfo externalImports entryBinding sourceModules
+                    case result of
+                      Left err
+                        | shouldRepairOpaqueEitherConstructors err ->
+                            analyzeAndRenderBundle
+                              loaded
+                              executableInfo
+                              externalImports
+                              entryBinding
+                              (repairOpaqueEitherConstructorsInSourceModules sourceModules)
+                      _ -> pure result
+
+analyzeAndRenderBundle ::
+  LoadedGhcModules ->
+  ExecutableInfo ->
+  [ExternalImport] ->
+  String ->
+  [SourceModule] ->
+  IO (Either BundleError String)
+analyzeAndRenderBundle loaded executableInfo externalImports entryBinding sourceModules = do
+  let candidateSource = renderBundleSource executableInfo externalImports entryBinding sourceModules
+  liveSetResult <-
+    analyzeCoreLiveSet
+      (loadedGhcConfig loaded)
+      (loadedGhcArguments loaded)
+      candidateSource
+  case liveSetResult of
+    Left err -> pure (Left err)
+    Right liveSet ->
+      let prunedModules = pruneSourceModules liveSet entryBinding sourceModules
+          prunedSource = renderBundleSource executableInfo externalImports entryBinding prunedModules
+       in pure (Right prunedSource)
+
+shouldRepairOpaqueEitherConstructors :: BundleError -> Bool
+shouldRepairOpaqueEitherConstructors (GhcLoadFailed message) =
+  "Illegal term-level use of the type constructor or class" `isInfixOf` message
+shouldRepairOpaqueEitherConstructors _ =
+  False
 
 shouldEmitModule :: LoadedModule -> Bool
 shouldEmitModule _loadedModule =
   True
 
-readSourceModule :: [String] -> LoadedModule -> IO (Either String SourceModule)
-readSourceModule internalModuleNames loadedModule =
-  case (loadedModuleFile loadedModule, loadedRenamedSource loadedModule) of
-    (Nothing, _) ->
+loadedInternalGlobalRdrEnvs :: [LoadedModule] -> [(String, GlobalRdrEnv)]
+loadedInternalGlobalRdrEnvs loadedModules =
+  [ (loadedModuleName loadedModule, globalRdrEnv)
+  | loadedModule <- loadedModules
+  , globalRdrEnv <- maybeToList (loadedGlobalRdrEnv loadedModule)
+  ]
+
+readSourceModule :: [String] -> [(String, GlobalRdrEnv)] -> LoadedModule -> IO (Either String SourceModule)
+readSourceModule internalModuleNames internalGlobalRdrEnvs loadedModule =
+  case (loadedModuleFile loadedModule, loadedModuleSource loadedModule, loadedRenamedSource loadedModule) of
+    (Nothing, _, _) ->
       pure (Left ("Internal module has no source file: " ++ loadedModuleName loadedModule))
-    (_, Nothing) ->
+    (_, Nothing, _) ->
+      pure (Left ("Internal module source was not captured: " ++ loadedModuleName loadedModule))
+    (_, _, Nothing) ->
       pure (Left ("Internal module has no renamed source: " ++ loadedModuleName loadedModule))
-    (Just path, Just renamedSource) -> do
-      source <- readFile path
+    (_, Just source, Just renamedSource) -> do
       let sourceLines = lines source
           pragmas = filter isPragmaLine sourceLines
           renderedDeclarations =
             trimBlankEdges
-              (renderRenamedDeclarations internalModuleNames (loadedGlobalRdrEnv loadedModule) renamedSource)
+              (renderRenamedDeclarations internalModuleNames internalGlobalRdrEnvs (loadedGlobalRdrEnv loadedModule) renamedSource)
           declarationMappings = buildDeclarationMappings internalModuleNames loadedModule
           externalRewrites =
             collectExternalIdentifierRewrites
               internalModuleNames
+              internalGlobalRdrEnvs
               (loadedGlobalRdrEnv loadedModule)
               renamedSource
           declarations =
-            sanitizePathsModulePathLiterals (loadedModuleName loadedModule) $
-              sanitizeGitHashConstructorExpressions
-                ( applyExternalIdentifierRewrites
-                    externalRewrites
-                    (applyDeclarationMappings declarationMappings renderedDeclarations)
-                )
+            applyExternalIdentifierRewrites
+              externalRewrites
+              (applyDeclarationMappings declarationMappings renderedDeclarations)
           declarationGroups =
             buildDeclarationGroups
               (loadedModuleName loadedModule)
@@ -130,10 +167,14 @@ readSourceModule internalModuleNames loadedModule =
               }
         )
 
-renderBundleSource :: ExecutableInfo -> [String] -> String -> [SourceModule] -> String
+renderBundleSource :: ExecutableInfo -> [ExternalImport] -> String -> [SourceModule] -> String
 renderBundleSource executableInfo externalImports entryBinding sourceModules =
   unlines $
-    let retainedPragmas = uniqueSorted (concatMap sourceModulePragmas sourceModules)
+    let retainedPragmas =
+          uniqueSorted
+            ( concatMap sourceModulePragmas sourceModules
+                ++ ["{-# LANGUAGE PackageImports #-}" | any usesPackageImport externalImports]
+            )
      in retainedPragmas
       ++ semanticSensitivePragmaNotes retainedPragmas
       ++ [ "{-# OPTIONS_GHC -Wno-unused-imports #-}"
@@ -141,8 +182,9 @@ renderBundleSource executableInfo externalImports entryBinding sourceModules =
          , "module Main (main) where"
          , ""
          ]
-      ++ map renderQualifiedImport (uniqueSorted externalImports)
+      ++ map renderQualifiedImport externalImports
       ++ [""]
+      ++ renderOpaqueEitherHelper sourceModules
       ++ concatMap renderSourceModule sourceModules
       ++ [ "main :: Prelude.IO ()"
          , "main = " ++ entryBinding
@@ -161,9 +203,37 @@ renderDeclarationGroup :: DeclarationGroup -> [String]
 renderDeclarationGroup group =
   declarationGroupLines group ++ [""]
 
-renderQualifiedImport :: String -> String
-renderQualifiedImport moduleNameValue =
-  "import qualified " ++ moduleNameValue
+renderQualifiedImport :: ExternalImport -> String
+renderQualifiedImport externalImport =
+  "import qualified "
+    ++ maybe "" (\packageName -> show packageName ++ " ") (externalImportPackage externalImport)
+    ++ externalImportModule externalImport
+
+usesPackageImport :: ExternalImport -> Bool
+usesPackageImport externalImport =
+  case externalImportPackage externalImport of
+    Just _ -> True
+    Nothing -> False
+
+renderOpaqueEitherHelper :: [SourceModule] -> [String]
+renderOpaqueEitherHelper sourceModules
+  | any sourceModuleUsesOpaqueEitherHelper sourceModules =
+      [ opaqueEitherHelperName ++ " :: Prelude.String -> Prelude.Either Prelude.String a"
+      , "{-# NOINLINE " ++ opaqueEitherHelperName ++ " #-}"
+      , opaqueEitherHelperName ++ " = Prelude.Left"
+      , ""
+      ]
+  | otherwise = []
+
+sourceModuleUsesOpaqueEitherHelper :: SourceModule -> Bool
+sourceModuleUsesOpaqueEitherHelper sourceModule =
+  any
+    (any (opaqueEitherHelperName `isInfixOf`) . declarationGroupLines)
+    (sourceModuleDeclarationGroups sourceModule)
+
+opaqueEitherHelperName :: String
+opaqueEitherHelperName =
+  "bundler_internal_opaque_either"
 
 semanticSensitivePragmaNotes :: [String] -> [String]
 semanticSensitivePragmaNotes pragmas =
@@ -186,14 +256,25 @@ normalizePragmaChar char
   | char `elem` "{#-}," = ' '
   | otherwise = char
 
-collectBundleExternalModules :: [String] -> [LoadedModule] -> [String]
-collectBundleExternalModules internalModuleNames loadedModules =
-  uniqueSorted
-    [ moduleName
+collectBundleExternalImports :: [String] -> [(String, GlobalRdrEnv)] -> [LoadedModule] -> [ExternalImport]
+collectBundleExternalImports internalModuleNames internalGlobalRdrEnvs loadedModules =
+  uniqueExternalImports
+    [ externalImport
     | loadedModule <- loadedModules
     , renamedSource <- maybeToList (loadedRenamedSource loadedModule)
-    , moduleName <- collectRenderedExternalModules internalModuleNames (loadedGlobalRdrEnv loadedModule) renamedSource
+    , externalImport <- collectRenderedExternalImports internalModuleNames internalGlobalRdrEnvs (loadedGlobalRdrEnv loadedModule) renamedSource
     ]
+
+uniqueExternalImports :: [ExternalImport] -> [ExternalImport]
+uniqueExternalImports externalImports =
+  [ selectedImport moduleName
+  | moduleName <- sort (nub (map externalImportModule externalImports))
+  ]
+  where
+    selectedImport moduleName =
+      case sort (nub [packageName | externalImport <- externalImports, externalImportModule externalImport == moduleName, packageName <- maybeToList (externalImportPackage externalImport)]) of
+        packageName : _ -> ExternalImport (Just packageName) moduleName
+        [] -> ExternalImport Nothing moduleName
 
 loadedModuleNames :: LoadedModule -> [Name]
 loadedModuleNames loadedModule =
@@ -337,35 +418,72 @@ rewriteExternalIdentifierToken rewrites token
         Just replacement -> replacement
         Nothing -> token
 
-sanitizeGitHashConstructorExpressions :: [String] -> [String]
-sanitizeGitHashConstructorExpressions [] = []
-sanitizeGitHashConstructorExpressions [line] = [line]
-sanitizeGitHashConstructorExpressions (line : next : rest)
-  | isGitHashRightStart line next =
-      let replacementLine = replaceGitHashRightStart line
-       in replacementLine : dropGitHashConstructor rest
-  | otherwise = line : sanitizeGitHashConstructorExpressions (next : rest)
+repairOpaqueEitherConstructorsInSourceModules :: [SourceModule] -> [SourceModule]
+repairOpaqueEitherConstructorsInSourceModules =
+  map repairSourceModule
+  where
+    repairSourceModule sourceModule =
+      sourceModule
+        { sourceModuleDeclarationGroups =
+            map repairDeclarationGroup (sourceModuleDeclarationGroups sourceModule)
+        }
 
-isGitHashRightStart :: String -> String -> Bool
-isGitHashRightStart line next =
-  rightToken (lastToken (trim line))
-    && "(GitHash.GitInfo" `isPrefixOf` trimLeft next
+    repairDeclarationGroup group =
+      group
+        { declarationGroupLines =
+            repairOpaqueEitherConstructorExpressions (declarationGroupLines group)
+        }
+
+repairOpaqueEitherConstructorExpressions :: [String] -> [String]
+repairOpaqueEitherConstructorExpressions [] = []
+repairOpaqueEitherConstructorExpressions [line] = [line]
+repairOpaqueEitherConstructorExpressions (line : next : rest)
+  | rightToken (lastToken (trim line)) && "(" `isPrefixOf` trimLeft next =
+      case collectEitherStringExpression (next : rest) of
+        Just (bodyLines, annotationLine, remaining)
+          | hasOpaqueEitherConstructor bodyLines annotationLine ->
+              replaceRightWithLeftPayload (line : bodyLines ++ [annotationLine]) line
+                : annotationLine
+                : repairOpaqueEitherConstructorExpressions remaining
+        _ -> line : repairOpaqueEitherConstructorExpressions (next : rest)
+  | otherwise = line : repairOpaqueEitherConstructorExpressions (next : rest)
+
+hasOpaqueEitherConstructor :: [String] -> String -> Bool
+hasOpaqueEitherConstructor bodyLines annotationLine =
+  case firstConstructorToken bodyLines of
+    Nothing -> False
+    Just constructorToken ->
+      "." `isInfixOf` constructorToken
+        && constructorToken `isInfixOf` annotationLine
+        && "Either " `isInfixOf` annotationLine
+
+firstConstructorToken :: [String] -> Maybe String
+firstConstructorToken [] = Nothing
+firstConstructorToken (line : rest) =
+  case trimLeft line of
+    '(' : value ->
+      case takeWhile isQualifiedIdentifierChar value of
+        [] -> firstConstructorToken rest
+        token -> Just token
+    _ -> firstConstructorToken rest
+
+replaceRightWithLeftPayload :: [String] -> String -> String
+replaceRightWithLeftPayload originalLines line =
+  let token = lastToken (trim line)
+      replacement = opaqueEitherHelperName ++ " " ++ show (unlines originalLines) ++ " ::"
+   in replaceLineSuffix token replacement line
 
 rightToken :: String -> Bool
 rightToken token =
   token == "Right" || ".Right" `isSuffixOf` token
 
-replaceGitHashRightStart :: String -> String
-replaceGitHashRightStart line =
-  replaceLineSuffix "Right" "Left \"\" ::" line
-
-dropGitHashConstructor :: [String] -> [String]
-dropGitHashConstructor [] = []
-dropGitHashConstructor (line : rest)
-  | "Either " `isInfixOf` line && "GitHash.GitInfo" `isInfixOf` line =
-      line : sanitizeGitHashConstructorExpressions rest
-  | otherwise =
-      dropGitHashConstructor rest
+collectEitherStringExpression :: [String] -> Maybe ([String], String, [String])
+collectEitherStringExpression [] = Nothing
+collectEitherStringExpression (line : rest)
+  | "Either " `isInfixOf` line = Just ([], line, rest)
+  | otherwise = do
+      (bodyLines, annotationLine, remaining) <- collectEitherStringExpression rest
+      pure (line : bodyLines, annotationLine, remaining)
 
 replaceLineSuffix :: String -> String -> String -> String
 replaceLineSuffix suffix replacement line =
@@ -380,19 +498,6 @@ lastToken value =
   case words value of
     [] -> ""
     tokens -> last tokens
-
-sanitizePathsModulePathLiterals :: String -> [String] -> [String]
-sanitizePathsModulePathLiterals moduleNameValue declarations
-  | "Paths_" `isPrefixOf` moduleNameValue =
-      map sanitizeAbsolutePathAssignment declarations
-  | otherwise = declarations
-
-sanitizeAbsolutePathAssignment :: String -> String
-sanitizeAbsolutePathAssignment line =
-  case break (== '"') line of
-    (prefix, '"' : '/' : _rest)
-      | "=" `isInfixOf` prefix -> prefix ++ "\".\""
-    _ -> line
 
 lastIdentifierSegment :: String -> String
 lastIdentifierSegment token =

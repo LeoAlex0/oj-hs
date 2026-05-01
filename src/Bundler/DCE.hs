@@ -115,13 +115,12 @@ analyzeCoreLiveSetInSession ghcArguments candidateSource = do
               pure (Right (coreLiveSetFromBinds (mg_binds simplified)))
 
 captureDiagnostics :: IORef [String] -> LogAction -> LogAction
-captureDiagnostics diagnosticsRef originalLogAction flags messageClass sourceSpan message = do
+captureDiagnostics diagnosticsRef _originalLogAction flags messageClass sourceSpan message = do
   let rendered =
         renderWithContext
           (log_default_user_context flags)
           (mkLocMessage messageClass sourceSpan message)
   modifyIORef' diagnosticsRef (++ [rendered])
-  originalLogAction flags messageClass sourceSpan message
 
 coreLoadFailureMessage :: [String] -> String
 coreLoadFailureMessage diagnostics =
