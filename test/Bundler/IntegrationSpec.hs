@@ -61,6 +61,9 @@ spec = describe "haskell-bundler integration" $ do
     it "bootstraps haskell-bundler deterministically" $ \outputDir -> do
       firstSource <- bundleExecutable outputDir "haskell-bundler"
       firstSource `shouldSatisfy` (not . containsBundlerEnvironmentValue [outputDir])
+      firstSource `shouldSatisfy` ("{-# LANGUAGE PackageImports #-}" `isInfixOf`)
+      firstSource `shouldSatisfy` ("import qualified \"ghc\" GHC.Core" `isInfixOf`)
+      firstSource `shouldSatisfy` (not . ("bundler_internal_opaque_either :: Prelude.String" `isInfixOf`))
       compileBundledSourceWithCabalExec outputDir "haskell-bundler.hs"
       bundledBundler <-
         compileBundledExecutableForExecutable

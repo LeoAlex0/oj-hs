@@ -15,6 +15,7 @@ import Data.Maybe (mapMaybe)
 import Bundler.Cabal (ExecutableInfo (..), PackageInfo (..))
 import Bundler.Error (BundleError (..))
 import GHC.Driver.Monad (pushLogHookM)
+import GHC.Driver.Env (hsc_units)
 import GHC.Types.Error (mkLocMessage)
 import GHC.Data.Graph.Directed (topologicalSortG)
 import GHC
@@ -27,6 +28,7 @@ import GHC
   , SuccessFlag (Failed, Succeeded)
   , TypecheckedSource
   , getModuleGraph
+  , getSession
   , getSessionDynFlags
   , guessTarget
   , load
@@ -47,6 +49,7 @@ import GHC
   )
 import GHC.Types.SrcLoc (noLoc)
 import GHC.Types.Name.Reader (GlobalRdrEnv)
+import GHC.Unit.Info (unitId, unitPackageNameString)
 import GHC.Unit.Module.Graph
   ( mgModSummaries'
   , moduleGraphNodeModSum
@@ -54,6 +57,8 @@ import GHC.Unit.Module.Graph
   , summaryNodeSummary
   )
 import GHC.Unit.Module.Location (ml_hs_file)
+import GHC.Unit.State (listUnitInfo)
+import GHC.Unit.Types (unitIdString)
 import GHC.Utils.Logger (LogAction, getLogger, log_default_user_context)
 import GHC.Utils.Outputable (renderWithContext)
 import System.Directory (createDirectory, getTemporaryDirectory, removeFile, removePathForcibly)
@@ -70,6 +75,7 @@ newtype GhcConfig = GhcConfig
 data LoadedGhcModules = LoadedGhcModules
   { loadedGhcConfig :: GhcConfig
   , loadedGhcArguments :: [String]
+  , loadedUnitPackageNames :: [(String, String)]
   , loadedModules :: [LoadedModule]
   }
 
@@ -79,6 +85,8 @@ instance Show LoadedGhcModules where
       ++ show (loadedGhcConfig loaded)
       ++ ", loadedGhcArguments = "
       ++ show (loadedGhcArguments loaded)
+      ++ ", loadedUnitPackageNames = "
+      ++ show (loadedUnitPackageNames loaded)
       ++ ", loadedModules = "
       ++ show (loadedModules loaded)
       ++ " }"
@@ -160,6 +168,7 @@ loadInSession packageInfo executableInfo libDir syntheticSourceDirs = do
         Failed -> pure (Left (GhcLoadFailed (loadFailureMessage executableInfo diagnostics)))
         Succeeded -> do
           moduleGraph <- getModuleGraph
+          unitPackageNames <- currentUnitPackageNames
           let summaries = moduleGraphSummariesInDependencyOrder moduleGraph
           loaded <- mapM (toLoadedModule allSourceDirs) summaries
           pure
@@ -167,9 +176,18 @@ loadInSession packageInfo executableInfo libDir syntheticSourceDirs = do
                 LoadedGhcModules
                   { loadedGhcConfig = GhcConfig libDir
                   , loadedGhcArguments = arguments
+                  , loadedUnitPackageNames = unitPackageNames
                   , loadedModules = loaded
                   }
             )
+
+currentUnitPackageNames :: Ghc [(String, String)]
+currentUnitPackageNames = do
+  session <- getSession
+  pure . nub $
+    [ (unitIdString (unitId unitInfo), unitPackageNameString unitInfo)
+    | unitInfo <- listUnitInfo (hsc_units session)
+    ]
 
 captureDiagnostics :: IORef [String] -> LogAction -> LogAction
 captureDiagnostics diagnosticsRef originalLogAction flags messageClass sourceSpan message = do

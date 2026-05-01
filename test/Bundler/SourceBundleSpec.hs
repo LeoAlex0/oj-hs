@@ -5,7 +5,7 @@ import Bundler.Cabal
   , PackageInfo (..)
   )
 import Bundler.Error (BundleError, renderBundleError)
-import Bundler.GHC (loadExecutableModules)
+import Bundler.GHC (LoadedGhcModules (..), loadExecutableModules)
 import Bundler.SourceBundle (generateSourceBundle)
 import Control.Exception (finally)
 import Data.List (isInfixOf)
@@ -38,11 +38,13 @@ spec = describe "Bundler.SourceBundle" $ do
       loaded <- shouldRightRender (loadExecutableModules (packageInfo packageDir) (executableInfo packageDir))
       source <- shouldRightRender (generateSourceBundle (packageInfo packageDir) (executableInfo packageDir) loaded)
 
+      loadedUnitPackageNames loaded `shouldSatisfy` any ((== "base") . snd)
       source `shouldSatisfy` ("module Main (main) where" `isInfixOf`)
       source `shouldSatisfy` ("fixture_u46_Entry_main" `isInfixOf`)
       source `shouldSatisfy` ("fixture_u46_Entry_used" `isInfixOf`)
       source `shouldSatisfy` (not . ("fixture_u46_Entry_unused" `isInfixOf`))
       source `shouldSatisfy` (not . ("import qualified Fixture.Entry" `isInfixOf`))
+      source `shouldSatisfy` (not . ("bundler_internal_opaque_either :: Prelude.String" `isInfixOf`))
       source `shouldSatisfy` (not . (packageDir `isInfixOf`))
       compileGeneratedSource packageDir source
 
@@ -67,6 +69,18 @@ spec = describe "Bundler.SourceBundle" $ do
       source `shouldSatisfy` ("semantic-sensitive extension retained globally: RebindableSyntax" `isInfixOf`)
       compileGeneratedSource packageDir source
 
+    it "notes retained synthetic Paths directory functions" $ \packageDir -> do
+      writePathsDataFixturePackage packageDir
+      let info = pathsDataExecutableInfo packageDir
+          pkg = (packageInfo packageDir) {packageExecutables = [info]}
+      loaded <- shouldRightRender (loadExecutableModules pkg info)
+      source <- shouldRightRender (generateSourceBundle pkg info loaded)
+
+      source `shouldSatisfy` ("synthetic Paths_fixture directory functions return current-directory relative paths" `isInfixOf`)
+      source `shouldSatisfy` ("getDataFileName" `isInfixOf`)
+      source `shouldSatisfy` (not . (packageDir `isInfixOf`))
+      compileGeneratedSource packageDir source
+
 writeFixturePackage :: FilePath -> IO ()
 writeFixturePackage packageDir = do
   createDirectoryIfMissing True (packageDir </> "app")
@@ -83,9 +97,11 @@ writeFixturePackage packageDir = do
     ( unlines
         [ "module Fixture.Entry where"
         , "main :: IO ()"
-        , "main = print used"
+        , "main = print (used + length opaqueHelperLiteral)"
         , "used :: Int"
         , "used = 1"
+        , "opaqueHelperLiteral :: String"
+        , "opaqueHelperLiteral = \"bundler_internal_opaque_either\""
         , "unused :: Int"
         , "unused = 2"
         ]
@@ -130,6 +146,19 @@ writePreludeBoundaryFixturePackage packageDir = do
         , "fromInteger = Prelude.fromInteger"
         , "main :: Prelude.IO ()"
         , "main = Prelude.putStrLn \"ok\""
+        ]
+    )
+
+writePathsDataFixturePackage :: FilePath -> IO ()
+writePathsDataFixturePackage packageDir = do
+  createDirectoryIfMissing True (packageDir </> "app")
+  writeFile
+    (packageDir </> "app" </> "Main.hs")
+    ( unlines
+        [ "module Main (main) where"
+        , "import qualified Paths_fixture"
+        , "main :: IO ()"
+        , "main = Paths_fixture.getDataFileName \"asset.txt\" >>= putStrLn"
         ]
     )
 
@@ -200,6 +229,10 @@ preludeBoundaryExecutableInfo packageDir =
   (executableInfo packageDir)
     { executableDefaultExtensions = ["NoImplicitPrelude", "RebindableSyntax"]
     }
+
+pathsDataExecutableInfo :: FilePath -> ExecutableInfo
+pathsDataExecutableInfo =
+  executableInfo
 
 shouldRightRender :: IO (Either BundleError a) -> IO a
 shouldRightRender action = do

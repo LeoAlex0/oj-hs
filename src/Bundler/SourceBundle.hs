@@ -6,7 +6,7 @@ import Data.Char (isSpace)
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf, nub, sort, stripPrefix)
 import Data.Maybe (maybeToList)
 import qualified Data.Set as Set
-import Bundler.Cabal (ExecutableInfo (..), PackageInfo)
+import Bundler.Cabal (ExecutableInfo (..), PackageInfo (..))
 import Bundler.DCE (CoreLiveSet (..), analyzeCoreLiveSet)
 import Bundler.Error (BundleError (GhcLoadFailed, SourceBundleFailed, SymbolConflict))
 import Bundler.GHC (LoadedGhcModules (..), LoadedModule (..))
@@ -42,6 +42,7 @@ data DeclarationGroup = DeclarationGroup
   , declarationGroupDefinedIdentifiers :: [String]
   , declarationGroupReferencedIdentifiers :: [String]
   , declarationGroupCanPrune :: Bool
+  , declarationGroupRequiresOpaqueEitherHelper :: Bool
   }
   deriving (Eq, Show)
 
@@ -58,15 +59,17 @@ generateSourceBundle ::
   ExecutableInfo ->
   LoadedGhcModules ->
   IO (Either BundleError String)
-generateSourceBundle _packageInfo executableInfo loaded = do
+generateSourceBundle packageInfo executableInfo loaded = do
   let internalModules = filter loadedModuleIsInternal (loadedModules loaded)
       internalNames = map loadedModuleName internalModules
       internalGlobalRdrEnvs = loadedInternalGlobalRdrEnvs internalModules
+      unitPackageNames = loadedUnitPackageNames loaded
       emittedModules = filter shouldEmitModule internalModules
+      allDeclarationMappings = concatMap (buildDeclarationMappings internalNames) emittedModules
   case findGeneratedNameConflict internalNames emittedModules of
     Just (left, right) -> pure (Left (SymbolConflict left right))
     Nothing -> do
-      parsedModules <- traverse (readSourceModule internalNames internalGlobalRdrEnvs) emittedModules
+      parsedModules <- traverse (readSourceModule internalNames internalGlobalRdrEnvs allDeclarationMappings) emittedModules
       case sequence parsedModules of
         Left message -> pure (Left (SourceBundleFailed message))
         Right sourceModules ->
@@ -75,13 +78,16 @@ generateSourceBundle _packageInfo executableInfo loaded = do
             Right entryBinding ->
               let externalImports =
                     uniqueExternalImports
-                      (ExternalImport Nothing "Prelude" : collectBundleExternalImports internalNames internalGlobalRdrEnvs emittedModules)
+                      ( ExternalImport Nothing "Prelude"
+                          : collectBundleExternalImports unitPackageNames internalNames internalGlobalRdrEnvs emittedModules
+                      )
                in do
-                    result <- analyzeAndRenderBundle loaded executableInfo externalImports entryBinding sourceModules
+                    result <- analyzeAndRenderBundle packageInfo loaded executableInfo externalImports entryBinding sourceModules
                     case result of
                       Left err
                         | shouldRepairOpaqueEitherConstructors err ->
                             analyzeAndRenderBundle
+                              packageInfo
                               loaded
                               executableInfo
                               externalImports
@@ -90,14 +96,15 @@ generateSourceBundle _packageInfo executableInfo loaded = do
                       _ -> pure result
 
 analyzeAndRenderBundle ::
+  PackageInfo ->
   LoadedGhcModules ->
   ExecutableInfo ->
   [ExternalImport] ->
   String ->
   [SourceModule] ->
   IO (Either BundleError String)
-analyzeAndRenderBundle loaded executableInfo externalImports entryBinding sourceModules = do
-  let candidateSource = renderBundleSource executableInfo externalImports entryBinding sourceModules
+analyzeAndRenderBundle packageInfo loaded executableInfo externalImports entryBinding sourceModules = do
+  let candidateSource = renderBundleSource packageInfo executableInfo externalImports entryBinding sourceModules
   liveSetResult <-
     analyzeCoreLiveSet
       (loadedGhcConfig loaded)
@@ -107,7 +114,7 @@ analyzeAndRenderBundle loaded executableInfo externalImports entryBinding source
     Left err -> pure (Left err)
     Right liveSet ->
       let prunedModules = pruneSourceModules liveSet entryBinding sourceModules
-          prunedSource = renderBundleSource executableInfo externalImports entryBinding prunedModules
+          prunedSource = renderBundleSource packageInfo executableInfo externalImports entryBinding prunedModules
        in pure (Right prunedSource)
 
 shouldRepairOpaqueEitherConstructors :: BundleError -> Bool
@@ -127,8 +134,8 @@ loadedInternalGlobalRdrEnvs loadedModules =
   , globalRdrEnv <- maybeToList (loadedGlobalRdrEnv loadedModule)
   ]
 
-readSourceModule :: [String] -> [(String, GlobalRdrEnv)] -> LoadedModule -> IO (Either String SourceModule)
-readSourceModule internalModuleNames internalGlobalRdrEnvs loadedModule =
+readSourceModule :: [String] -> [(String, GlobalRdrEnv)] -> [DeclarationMapping] -> LoadedModule -> IO (Either String SourceModule)
+readSourceModule internalModuleNames internalGlobalRdrEnvs allDeclarationMappings loadedModule =
   case (loadedModuleFile loadedModule, loadedModuleSource loadedModule, loadedRenamedSource loadedModule) of
     (Nothing, _, _) ->
       pure (Left ("Internal module has no source file: " ++ loadedModuleName loadedModule))
@@ -142,7 +149,11 @@ readSourceModule internalModuleNames internalGlobalRdrEnvs loadedModule =
           renderedDeclarations =
             trimBlankEdges
               (renderRenamedDeclarations internalModuleNames internalGlobalRdrEnvs (loadedGlobalRdrEnv loadedModule) renamedSource)
-          declarationMappings = buildDeclarationMappings internalModuleNames loadedModule
+          declarationMappings =
+            [ mapping
+            | mapping <- allDeclarationMappings
+            , mappingOriginalModule mapping == loadedModuleName loadedModule
+            ]
           externalRewrites =
             collectExternalIdentifierRewrites
               internalModuleNames
@@ -156,7 +167,7 @@ readSourceModule internalModuleNames internalGlobalRdrEnvs loadedModule =
           declarationGroups =
             buildDeclarationGroups
               (loadedModuleName loadedModule)
-              declarationMappings
+              allDeclarationMappings
               declarations
       pure
         ( Right
@@ -167,8 +178,8 @@ readSourceModule internalModuleNames internalGlobalRdrEnvs loadedModule =
               }
         )
 
-renderBundleSource :: ExecutableInfo -> [ExternalImport] -> String -> [SourceModule] -> String
-renderBundleSource executableInfo externalImports entryBinding sourceModules =
+renderBundleSource :: PackageInfo -> ExecutableInfo -> [ExternalImport] -> String -> [SourceModule] -> String
+renderBundleSource packageInfo executableInfo externalImports entryBinding sourceModules =
   unlines $
     let retainedPragmas =
           uniqueSorted
@@ -177,6 +188,7 @@ renderBundleSource executableInfo externalImports entryBinding sourceModules =
             )
      in retainedPragmas
       ++ semanticSensitivePragmaNotes retainedPragmas
+      ++ syntheticPathsModuleNotes packageInfo sourceModules
       ++ [ "{-# OPTIONS_GHC -Wno-unused-imports #-}"
          , "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"
          , "module Main (main) where"
@@ -217,19 +229,18 @@ usesPackageImport externalImport =
 
 renderOpaqueEitherHelper :: [SourceModule] -> [String]
 renderOpaqueEitherHelper sourceModules
-  | any sourceModuleUsesOpaqueEitherHelper sourceModules =
-      [ opaqueEitherHelperName ++ " :: Prelude.String -> Prelude.Either Prelude.String a"
+  | any sourceModuleRequiresOpaqueEitherHelper sourceModules =
+      [ "-- bundler note: opaque Template Haskell Either constructor expansion kept as Left diagnostic payload"
+      , opaqueEitherHelperName ++ " :: Prelude.String -> Prelude.Either Prelude.String a"
       , "{-# NOINLINE " ++ opaqueEitherHelperName ++ " #-}"
       , opaqueEitherHelperName ++ " = Prelude.Left"
       , ""
       ]
   | otherwise = []
 
-sourceModuleUsesOpaqueEitherHelper :: SourceModule -> Bool
-sourceModuleUsesOpaqueEitherHelper sourceModule =
-  any
-    (any (opaqueEitherHelperName `isInfixOf`) . declarationGroupLines)
-    (sourceModuleDeclarationGroups sourceModule)
+sourceModuleRequiresOpaqueEitherHelper :: SourceModule -> Bool
+sourceModuleRequiresOpaqueEitherHelper sourceModule =
+  any declarationGroupRequiresOpaqueEitherHelper (sourceModuleDeclarationGroups sourceModule)
 
 opaqueEitherHelperName :: String
 opaqueEitherHelperName =
@@ -246,6 +257,46 @@ semanticSensitiveExtensions :: [String]
 semanticSensitiveExtensions =
   ["NoImplicitPrelude", "RebindableSyntax", "QualifiedDo"]
 
+syntheticPathsModuleNotes :: PackageInfo -> [SourceModule] -> [String]
+syntheticPathsModuleNotes packageInfo sourceModules =
+  [ "-- bundler note: synthetic "
+      ++ packagePathsModuleName packageInfo
+      ++ " directory functions return current-directory relative paths"
+  | usesSyntheticPathsDirectoryFunction (packagePathsModuleName packageInfo) sourceModules
+  ]
+
+usesSyntheticPathsDirectoryFunction :: String -> [SourceModule] -> Bool
+usesSyntheticPathsDirectoryFunction pathsModuleName sourceModules =
+  any (sourceModuleUsesSyntheticPathsDirectoryFunction pathsModuleName) sourceModules
+
+sourceModuleUsesSyntheticPathsDirectoryFunction :: String -> SourceModule -> Bool
+sourceModuleUsesSyntheticPathsDirectoryFunction pathsModuleName sourceModule =
+  any
+    (declarationGroupUsesSyntheticPathsDirectoryFunction pathsModuleName)
+    (sourceModuleDeclarationGroups sourceModule)
+
+declarationGroupUsesSyntheticPathsDirectoryFunction :: String -> DeclarationGroup -> Bool
+declarationGroupUsesSyntheticPathsDirectoryFunction pathsModuleName group =
+  any
+    (mappingUsesSyntheticPathsDirectoryFunction pathsModuleName)
+    (declarationGroupMappings group)
+
+mappingUsesSyntheticPathsDirectoryFunction :: String -> DeclarationMapping -> Bool
+mappingUsesSyntheticPathsDirectoryFunction pathsModuleName mapping =
+  mappingOriginalModule mapping == pathsModuleName
+    && mappingOriginalOccurrence mapping `elem` syntheticPathsDirectoryFunctions
+
+syntheticPathsDirectoryFunctions :: [String]
+syntheticPathsDirectoryFunctions =
+  [ "getBinDir"
+  , "getLibDir"
+  , "getDynLibDir"
+  , "getDataDir"
+  , "getLibexecDir"
+  , "getSysconfDir"
+  , "getDataFileName"
+  ]
+
 mentionsLanguageExtension :: String -> String -> Bool
 mentionsLanguageExtension extension pragma =
   ("{-# LANGUAGE" `isPrefixOf` trimLeft pragma)
@@ -256,13 +307,13 @@ normalizePragmaChar char
   | char `elem` "{#-}," = ' '
   | otherwise = char
 
-collectBundleExternalImports :: [String] -> [(String, GlobalRdrEnv)] -> [LoadedModule] -> [ExternalImport]
-collectBundleExternalImports internalModuleNames internalGlobalRdrEnvs loadedModules =
+collectBundleExternalImports :: [(String, String)] -> [String] -> [(String, GlobalRdrEnv)] -> [LoadedModule] -> [ExternalImport]
+collectBundleExternalImports unitPackageNames internalModuleNames internalGlobalRdrEnvs loadedModules =
   uniqueExternalImports
     [ externalImport
     | loadedModule <- loadedModules
     , renamedSource <- maybeToList (loadedRenamedSource loadedModule)
-    , externalImport <- collectRenderedExternalImports internalModuleNames internalGlobalRdrEnvs (loadedGlobalRdrEnv loadedModule) renamedSource
+    , externalImport <- collectRenderedExternalImports unitPackageNames internalModuleNames internalGlobalRdrEnvs (loadedGlobalRdrEnv loadedModule) renamedSource
     ]
 
 uniqueExternalImports :: [ExternalImport] -> [ExternalImport]
@@ -423,30 +474,44 @@ repairOpaqueEitherConstructorsInSourceModules =
   map repairSourceModule
   where
     repairSourceModule sourceModule =
-      sourceModule
-        { sourceModuleDeclarationGroups =
+      let repairedGroups =
             map repairDeclarationGroup (sourceModuleDeclarationGroups sourceModule)
-        }
+       in sourceModule
+            { sourceModuleDeclarationGroups = repairedGroups
+            }
 
     repairDeclarationGroup group =
-      group
-        { declarationGroupLines =
+      let (repairedLines, didRepair) =
             repairOpaqueEitherConstructorExpressions (declarationGroupLines group)
-        }
+       in group
+            { declarationGroupLines = repairedLines
+            , declarationGroupRequiresOpaqueEitherHelper =
+                declarationGroupRequiresOpaqueEitherHelper group || didRepair
+            }
 
-repairOpaqueEitherConstructorExpressions :: [String] -> [String]
-repairOpaqueEitherConstructorExpressions [] = []
-repairOpaqueEitherConstructorExpressions [line] = [line]
+repairOpaqueEitherConstructorExpressions :: [String] -> ([String], Bool)
+repairOpaqueEitherConstructorExpressions [] = ([], False)
+repairOpaqueEitherConstructorExpressions [line] = ([line], False)
 repairOpaqueEitherConstructorExpressions (line : next : rest)
   | rightToken (lastToken (trim line)) && "(" `isPrefixOf` trimLeft next =
       case collectEitherStringExpression (next : rest) of
         Just (bodyLines, annotationLine, remaining)
           | hasOpaqueEitherConstructor bodyLines annotationLine ->
-              replaceRightWithLeftPayload (line : bodyLines ++ [annotationLine]) line
-                : annotationLine
-                : repairOpaqueEitherConstructorExpressions remaining
-        _ -> line : repairOpaqueEitherConstructorExpressions (next : rest)
-  | otherwise = line : repairOpaqueEitherConstructorExpressions (next : rest)
+              let (repairedRemaining, _didRepairRemaining) =
+                    repairOpaqueEitherConstructorExpressions remaining
+               in ( replaceRightWithLeftPayload (line : bodyLines ++ [annotationLine]) line
+                      : annotationLine
+                      : repairedRemaining
+                  , True
+                  )
+        _ ->
+          let (repairedRest, didRepair) =
+                repairOpaqueEitherConstructorExpressions (next : rest)
+           in (line : repairedRest, didRepair)
+  | otherwise =
+      let (repairedRest, didRepair) =
+            repairOpaqueEitherConstructorExpressions (next : rest)
+       in (line : repairedRest, didRepair)
 
 hasOpaqueEitherConstructor :: [String] -> String -> Bool
 hasOpaqueEitherConstructor bodyLines annotationLine =
@@ -506,22 +571,28 @@ lastIdentifierSegment token =
     (_segment, _dot : rest) -> lastIdentifierSegment rest
 
 buildDeclarationGroups :: String -> [DeclarationMapping] -> [String] -> [DeclarationGroup]
-buildDeclarationGroups moduleNameValue mappings declarations =
+buildDeclarationGroups moduleNameValue allMappings declarations =
   [ buildDeclarationGroup index groupLines
   | (index, groupLines) <- zip [(1 :: Int) ..] (splitTopLevelDeclarationGroups declarations)
   ]
   where
-    knownIdentifiers = uniqueSorted (map mappingGeneratedIdentifier mappings)
+    allKnownIdentifiers = uniqueSorted (map mappingGeneratedIdentifier allMappings)
+    moduleMappings =
+      [ mapping
+      | mapping <- allMappings
+      , mappingOriginalModule mapping == moduleNameValue
+      ]
+    moduleKnownIdentifiers = uniqueSorted (map mappingGeneratedIdentifier moduleMappings)
 
     buildDeclarationGroup index groupLines =
       let groupId = moduleNameValue ++ "#" ++ show index
-          definedIdentifiers = declaredGeneratedIdentifiers knownIdentifiers groupLines
+          definedIdentifiers = declaredGeneratedIdentifiers moduleKnownIdentifiers groupLines
           groupMappings =
             [ mapping {mappingDeclarationGroup = groupId}
-            | mapping <- mappings
+            | mapping <- moduleMappings
             , mappingGeneratedIdentifier mapping `elem` definedIdentifiers
             ]
-          referencedIdentifiers = mentionedGeneratedIdentifiers knownIdentifiers groupLines
+          referencedIdentifiers = mentionedGeneratedIdentifiers allKnownIdentifiers groupLines
        in DeclarationGroup
             { declarationGroupId = groupId
             , declarationGroupLines = groupLines
@@ -530,6 +601,7 @@ buildDeclarationGroups moduleNameValue mappings declarations =
             , declarationGroupReferencedIdentifiers = referencedIdentifiers
             , declarationGroupCanPrune =
                 safeDeclarationGroup groupLines && not (null groupMappings)
+            , declarationGroupRequiresOpaqueEitherHelper = False
             }
 
 pruneSourceModules :: CoreLiveSet -> String -> [SourceModule] -> [SourceModule]

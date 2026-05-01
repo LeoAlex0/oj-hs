@@ -10,7 +10,7 @@ module Bundler.Transform
   ) where
 
 import Data.Data (Data, cast, gmapQ, gmapT)
-import Data.Char (isAlpha, isAlphaNum, isDigit, isSpace, isUpper)
+import Data.Char (isAlpha, isAlphaNum, isSpace, isUpper)
 import Data.List (isInfixOf, isPrefixOf, nub, sort, stripPrefix)
 import Data.Maybe (fromMaybe, maybeToList)
 import Bundler.Rename
@@ -72,11 +72,11 @@ collectRenamedNames :: RenamedSource -> [Name]
 collectRenamedNames =
   collectNames
 
-collectRenderedExternalImports :: [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> RenamedSource -> [ExternalImport]
-collectRenderedExternalImports internalModules internalGlobalRdrEnvs globalRdrEnv renamedSource =
+collectRenderedExternalImports :: [(String, String)] -> [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> RenamedSource -> [ExternalImport]
+collectRenderedExternalImports unitPackageNames internalModules internalGlobalRdrEnvs globalRdrEnv renamedSource =
   sort . nub $
     [ ExternalImport
-        { externalImportPackage = externalImportPackageForQualifier nameModuleValue qualifierModule
+        { externalImportPackage = externalImportPackageForQualifier unitPackageNames nameModuleValue qualifierModule
         , externalImportModule = moduleNameString qualifierModule
         }
     | name <- collectRenamedNames renamedSource
@@ -84,58 +84,11 @@ collectRenderedExternalImports internalModules internalGlobalRdrEnvs globalRdrEn
     , qualifierModule <- maybeToList (qualifierModuleForName internalModules internalGlobalRdrEnvs globalRdrEnv name)
     ]
 
-externalImportPackageForQualifier :: Module -> ModuleName -> Maybe String
-externalImportPackageForQualifier nameModuleValue qualifierModule
+externalImportPackageForQualifier :: [(String, String)] -> Module -> ModuleName -> Maybe String
+externalImportPackageForQualifier unitPackageNames nameModuleValue qualifierModule
   | moduleNameString qualifierModule == moduleNameString (moduleName nameModuleValue) =
-      packageNameFromUnitId (unitIdString (moduleUnitId nameModuleValue))
+      lookup (unitIdString (moduleUnitId nameModuleValue)) unitPackageNames
   | otherwise = Nothing
-
-packageNameFromUnitId :: String -> Maybe String
-packageNameFromUnitId unitIdValue =
-  case candidatePackageNames unitIdValue of
-    packageName : _
-      | validPackageImportName packageName -> Just packageName
-    []
-      | validPackageImportName unitIdValue && unitIdValue `notElem` nonPackageUnitIds ->
-          Just unitIdValue
-    _ -> Nothing
-
-nonPackageUnitIds :: [String]
-nonPackageUnitIds =
-  ["main", "interactive"]
-
-candidatePackageNames :: String -> [String]
-candidatePackageNames unitIdValue =
-  reverse
-    [ prefix
-    | (prefix, suffix) <- splitBeforeHyphens unitIdValue
-    , startsWithVersion suffix
-    ]
-
-splitBeforeHyphens :: String -> [(String, String)]
-splitBeforeHyphens value =
-  go [] value
-  where
-    go _ [] = []
-    go reversedPrefix ('-' : suffix) =
-      (reverse reversedPrefix, suffix) : go ('-' : reversedPrefix) suffix
-    go reversedPrefix (char : rest) =
-      go (char : reversedPrefix) rest
-
-startsWithVersion :: String -> Bool
-startsWithVersion value =
-  case span (\char -> isDigit char || char == '.') value of
-    (versionPrefix, _) ->
-      any isDigit versionPrefix && '.' `elem` versionPrefix
-
-validPackageImportName :: String -> Bool
-validPackageImportName [] = False
-validPackageImportName value =
-  all validPackageImportChar value
-
-validPackageImportChar :: Char -> Bool
-validPackageImportChar char =
-  isAlphaNum char || char == '-'
 
 collectExternalIdentifierRewrites :: [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> RenamedSource -> [(String, String)]
 collectExternalIdentifierRewrites internalModules internalGlobalRdrEnvs globalRdrEnv renamedSource =
