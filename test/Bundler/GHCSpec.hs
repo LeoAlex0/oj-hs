@@ -109,6 +109,8 @@ packageInfo packageDir =
     , packageVersionNumbers = [0, 0, 0, 0]
     , packageLibrarySourceDirs = []
     , packageLibraryDependencyPackageNames = []
+    , packageLibraryDefaultExtensions = []
+    , packageLibraryCompilerOptions = []
     , packageExecutables = []
     }
 

@@ -6,6 +6,7 @@ module Bundler.Cabal
   ) where
 
 import Control.Exception (SomeException, try)
+import Control.Monad (filterM)
 import Data.List (sort)
 import Distribution.Compiler (CompilerFlavor (GHC), PerCompilerFlavor (PerCompilerFlavor))
 import Distribution.PackageDescription
@@ -17,9 +18,12 @@ import Distribution.PackageDescription
   , executables
   , exeName
   , hsSourceDirs
+  , includeDirs
   , libBuildInfo
   , library
   , modulePath
+  , cppOptions
+  , oldExtensions
   , options
   , package
   , targetBuildDepends
@@ -35,7 +39,7 @@ import Distribution.Types.Version (versionNumbers)
 import Distribution.Utils.Path (getSymbolicPath)
 import Distribution.Verbosity (silent)
 import Bundler.Error (BundleError (..))
-import System.Directory (doesDirectoryExist, listDirectory)
+import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath ((</>), normalise, takeExtension, takeFileName)
 
 data PackageInfo = PackageInfo
@@ -47,6 +51,8 @@ data PackageInfo = PackageInfo
   , packageVersionNumbers :: [Int]
   , packageLibrarySourceDirs :: [FilePath]
   , packageLibraryDependencyPackageNames :: [String]
+  , packageLibraryDefaultExtensions :: [String]
+  , packageLibraryCompilerOptions :: [String]
   , packageExecutables :: [ExecutableInfo]
   }
   deriving (Eq, Show)
@@ -111,11 +117,19 @@ readOneCabalFile packageDir cabalFile = do
             case library packageDescription of
               Nothing -> []
               Just packageLibrary -> dependencyPackageNames (libBuildInfo packageLibrary)
+          libraryDefaultExtensions =
+            case library packageDescription of
+              Nothing -> []
+              Just packageLibrary -> buildInfoDefaultExtensions (libBuildInfo packageLibrary)
+          libraryCompilerOptions =
+            case library packageDescription of
+              Nothing -> []
+              Just packageLibrary -> buildInfoCompilerOptions packageDir (libBuildInfo packageLibrary)
           executableOrder =
             map (unUnqualComponentName . fst) (condExecutables genericPackageDescription)
-          allExecutables =
-            map (toExecutableInfo packageDir) $
-              orderExecutables executableOrder (executables packageDescription)
+      allExecutables <-
+        mapM (toExecutableInfo packageDir) $
+          orderExecutables executableOrder (executables packageDescription)
       pure
         ( Right
             PackageInfo
@@ -127,27 +141,45 @@ readOneCabalFile packageDir cabalFile = do
               , packageVersionNumbers = versionNumbers (pkgVersion packageIdentifier)
               , packageLibrarySourceDirs = librarySourceDirs
               , packageLibraryDependencyPackageNames = libraryDependencyPackageNames
+              , packageLibraryDefaultExtensions = libraryDefaultExtensions
+              , packageLibraryCompilerOptions = libraryCompilerOptions
               , packageExecutables = allExecutables
               }
         )
 
-toExecutableInfo :: FilePath -> Executable -> ExecutableInfo
-toExecutableInfo packageDir executable =
-  let info = buildInfo executable
-      sourceDirs = sourceDirectories packageDir info
-      mainPath =
+toExecutableInfo :: FilePath -> Executable -> IO ExecutableInfo
+toExecutableInfo packageDir executable = do
+  mainPath <- resolveExecutableMainPath packageDir sourceDirs (modulePath executable)
+  pure
+    ExecutableInfo
+      { executableName = unUnqualComponentName (exeName executable)
+      , executableMainPath = mainPath
+      , executableSourceDirs = sourceDirs
+      , executableDependencies = map prettyShow (targetBuildDepends info)
+      , executableDependencyPackageNames = dependencyPackageNames info
+      , executableDefaultExtensions = buildInfoDefaultExtensions info
+      , executableCompilerOptions = buildInfoCompilerOptions packageDir info
+      }
+  where
+    info = buildInfo executable
+    sourceDirs = sourceDirectories packageDir info
+
+resolveExecutableMainPath :: FilePath -> [FilePath] -> FilePath -> IO FilePath
+resolveExecutableMainPath packageDir sourceDirs mainFile = do
+  let candidateDirs =
         case sourceDirs of
-          [] -> normalise (packageDir </> modulePath executable)
-          sourceDir : _ -> normalise (sourceDir </> modulePath executable)
-   in ExecutableInfo
-        { executableName = unUnqualComponentName (exeName executable)
-        , executableMainPath = mainPath
-        , executableSourceDirs = sourceDirs
-        , executableDependencies = map prettyShow (targetBuildDepends info)
-        , executableDependencyPackageNames = dependencyPackageNames info
-        , executableDefaultExtensions = map prettyShow (defaultExtensions info)
-        , executableCompilerOptions = ghcCompilerOptions info
-        }
+          [] -> [normalise packageDir]
+          dirs -> dirs
+      candidates = map (normalise . (</> mainFile)) candidateDirs
+  existing <- filterM doesFileExist candidates
+  pure
+    ( case existing of
+        path : _ -> path
+        [] ->
+          case candidates of
+            path : _ -> path
+            [] -> normalise (packageDir </> mainFile)
+    )
 
 dependencyPackageNames :: BuildInfo -> [String]
 dependencyPackageNames info =
@@ -166,6 +198,16 @@ sourceDirectories packageDir info =
   case hsSourceDirs info of
     [] -> [normalise packageDir]
     dirs -> map (normalise . (packageDir </>) . getSymbolicPath) dirs
+
+buildInfoDefaultExtensions :: BuildInfo -> [String]
+buildInfoDefaultExtensions info =
+  map prettyShow (defaultExtensions info ++ oldExtensions info)
+
+buildInfoCompilerOptions :: FilePath -> BuildInfo -> [String]
+buildInfoCompilerOptions packageDir info =
+  ghcCompilerOptions info
+    ++ cppOptions info
+    ++ map (("-I" ++) . normalise . (packageDir </>)) (includeDirs info)
 
 ghcCompilerOptions :: BuildInfo -> [String]
 ghcCompilerOptions info =

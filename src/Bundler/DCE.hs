@@ -130,7 +130,14 @@ coreLoadFailureMessage diagnostics =
       ++ diagnostics
 
 candidateGhcArguments :: [String] -> [String]
-candidateGhcArguments = id
+candidateGhcArguments =
+  filter (not . isOptimizationFlag)
+
+isOptimizationFlag :: String -> Bool
+isOptimizationFlag "-O" = True
+isOptimizationFlag ('-' : 'O' : rest) =
+  all (`elem` ("0123456789" :: String)) rest
+isOptimizationFlag _ = False
 
 candidateSummary :: [ModSummary] -> Maybe ModSummary
 candidateSummary summaries =

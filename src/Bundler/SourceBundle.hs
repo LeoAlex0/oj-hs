@@ -27,6 +27,7 @@ import Bundler.Transform
 import GHC.Types.Name (Name, nameOccName)
 import GHC.Types.Name.Occurrence (NameSpace, occNameSpace, occNameString)
 import GHC.Types.Name.Reader (GlobalRdrEnv)
+import System.FilePath (normalise)
 
 data SourceModule = SourceModule
   { sourceModuleName :: String
@@ -73,7 +74,7 @@ generateSourceBundle packageInfo executableInfo loaded = do
       case sequence parsedModules of
         Left message -> pure (Left (SourceBundleFailed message))
         Right sourceModules ->
-          case findEntryBinding internalNames emittedModules of
+          case findEntryBinding internalNames executableInfo emittedModules of
             Left message -> pure (Left (SourceBundleFailed message))
             Right entryBinding ->
               let externalImports =
@@ -184,6 +185,7 @@ renderBundleSource packageInfo executableInfo externalImports entryBinding sourc
     let retainedPragmas =
           uniqueSorted
             ( concatMap sourceModulePragmas sourceModules
+                ++ map renderLanguagePragma (bundleDefaultExtensions packageInfo executableInfo)
                 ++ ["{-# LANGUAGE PackageImports #-}" | any usesPackageImport externalImports]
             )
      in retainedPragmas
@@ -214,6 +216,14 @@ renderSourceModule sourceModule =
 renderDeclarationGroup :: DeclarationGroup -> [String]
 renderDeclarationGroup group =
   declarationGroupLines group ++ [""]
+
+renderLanguagePragma :: String -> String
+renderLanguagePragma extension =
+  "{-# LANGUAGE " ++ extension ++ " #-}"
+
+bundleDefaultExtensions :: PackageInfo -> ExecutableInfo -> [String]
+bundleDefaultExtensions packageInfo executableInfo =
+  packageLibraryDefaultExtensions packageInfo ++ executableDefaultExtensions executableInfo
 
 renderQualifiedImport :: ExternalImport -> String
 renderQualifiedImport externalImport =
@@ -350,13 +360,8 @@ applyDeclarationMappings mappings =
   map (rewriteIdentifierTokens mappings)
 
 rewriteIdentifierTokens :: [DeclarationMapping] -> String -> String
-rewriteIdentifierTokens mappings [] = []
-rewriteIdentifierTokens mappings line@(char : rest)
-  | isQualifiedIdentifierChar char =
-      let (tokenRest, next) = span isQualifiedIdentifierChar rest
-          token = char : tokenRest
-       in rewriteIdentifierToken mappings token ++ rewriteIdentifierTokens mappings next
-  | otherwise = char : rewriteIdentifierTokens mappings rest
+rewriteIdentifierTokens mappings =
+  rewriteHaskellLineIdentifierTokens (rewriteIdentifierToken mappings)
 
 rewriteIdentifierToken :: [DeclarationMapping] -> String -> String
 rewriteIdentifierToken mappings token =
@@ -427,6 +432,12 @@ firstSignatureBoundary line =
   go [] line
   where
     go _ [] = Nothing
+    go reversedPrefix remaining@('"' : _) =
+      let (literal, next) = consumeStringLiteral remaining
+       in go (reverse literal ++ reversedPrefix) next
+    go reversedPrefix remaining@('\'' : _)
+      | Just (literal, next) <- consumeCharLiteral remaining =
+          go (reverse literal ++ reversedPrefix) next
     go reversedPrefix remaining
       | "::" `isPrefixOf` remaining = Just (reverse reversedPrefix, "::", drop 2 remaining)
     go reversedPrefix (char : rest) =
@@ -437,6 +448,12 @@ firstAssignmentBoundary line =
   go Nothing [] line
   where
     go _ _ [] = Nothing
+    go _ reversedPrefix remaining@('"' : _) =
+      let (literal, next) = consumeStringLiteral remaining
+       in go (lastMaybe literal) (reverse literal ++ reversedPrefix) next
+    go _ reversedPrefix remaining@('\'' : _)
+      | Just (literal, next) <- consumeCharLiteral remaining =
+          go (lastMaybe literal) (reverse literal ++ reversedPrefix) next
     go previous reversedPrefix ('=' : next : rest)
       | next == '=' || next == '>' =
           go (Just next) (next : '=' : reversedPrefix) rest
@@ -453,13 +470,8 @@ firstAssignmentBoundary line =
       go (Just char) (char : reversedPrefix) rest
 
 rewriteExternalIdentifierTokens :: [(String, String)] -> String -> String
-rewriteExternalIdentifierTokens _ [] = []
-rewriteExternalIdentifierTokens rewrites (char : rest)
-  | isQualifiedIdentifierChar char =
-      let (tokenRest, next) = span isQualifiedIdentifierChar rest
-          token = char : tokenRest
-       in rewriteExternalIdentifierToken rewrites token ++ rewriteExternalIdentifierTokens rewrites next
-  | otherwise = char : rewriteExternalIdentifierTokens rewrites rest
+rewriteExternalIdentifierTokens rewrites =
+  rewriteHaskellLineIdentifierTokens (rewriteExternalIdentifierToken rewrites)
 
 rewriteExternalIdentifierToken :: [(String, String)] -> String -> String
 rewriteExternalIdentifierToken rewrites token
@@ -468,6 +480,58 @@ rewriteExternalIdentifierToken rewrites token
       case lookup token rewrites of
         Just replacement -> replacement
         Nothing -> token
+
+rewriteHaskellLineIdentifierTokens :: (String -> String) -> String -> String
+rewriteHaskellLineIdentifierTokens rewrite =
+  go
+  where
+    go [] = []
+    go line@('"' : _) =
+      let (literal, next) = consumeStringLiteral line
+       in literal ++ go next
+    go line@('\'' : _)
+      | Just (literal, next) <- consumeCharLiteral line =
+          literal ++ go next
+    go line@(char : rest)
+      | isQualifiedIdentifierChar char =
+          let (tokenRest, next) = span isQualifiedIdentifierChar rest
+              token = char : tokenRest
+           in rewrite token ++ go next
+      | otherwise = char : go rest
+
+consumeStringLiteral :: String -> (String, String)
+consumeStringLiteral [] = ([], [])
+consumeStringLiteral ('"' : rest) =
+  let (body, next, _closed) = consumeQuoted '"' rest
+   in ('"' : body, next)
+consumeStringLiteral value =
+  ([], value)
+
+consumeCharLiteral :: String -> Maybe (String, String)
+consumeCharLiteral ('\'' : rest) =
+  let (body, next, closed) = consumeQuoted '\'' rest
+   in if closed
+        then Just ('\'' : body, next)
+        else Nothing
+consumeCharLiteral _ =
+  Nothing
+
+consumeQuoted :: Char -> String -> (String, String, Bool)
+consumeQuoted _ [] = ([], [], False)
+consumeQuoted quote ('\\' : escaped : rest) =
+  let (body, next, closed) = consumeQuoted quote rest
+   in ('\\' : escaped : body, next, closed)
+consumeQuoted _ ['\\'] = (['\\'], [], False)
+consumeQuoted quote (char : rest)
+  | char == quote = ([char], rest, True)
+  | otherwise =
+      let (body, next, closed) = consumeQuoted quote rest
+       in (char : body, next, closed)
+
+lastMaybe :: [a] -> Maybe a
+lastMaybe [] = Nothing
+lastMaybe [value] = Just value
+lastMaybe (_ : rest) = lastMaybe rest
 
 repairOpaqueEitherConstructorsInSourceModules :: [SourceModule] -> [SourceModule]
 repairOpaqueEitherConstructorsInSourceModules =
@@ -772,21 +836,44 @@ isOperatorChar :: Char -> Bool
 isOperatorChar char =
   char `elem` ("!#$%&*+./<=>?@\\^|-~:" :: String)
 
-findEntryBinding :: [String] -> [LoadedModule] -> Either String String
-findEntryBinding internalModuleNames loadedModules =
-  case entryCandidates of
-    [entryBinding] -> Right entryBinding
-    [] -> Left "Could not find transformed internal main binding"
-    candidates -> Left ("Multiple transformed internal main bindings: " ++ show candidates)
+findEntryBinding :: [String] -> ExecutableInfo -> [LoadedModule] -> Either String String
+findEntryBinding internalModuleNames executableInfo loadedModules =
+  selectEntryBinding entryCandidates
   where
+    entryModules =
+      case filter (isExecutableEntryModule executableInfo) loadedModules of
+        [] -> filter ((== "Main") . loadedModuleName) loadedModules
+        modules -> modules
     entryCandidates =
       sort . nub $
-        [ transformGeneratedIdentifier transform
-        | loadedModule <- loadedModules
+        [ ( transformOriginalModule transform == loadedModuleName loadedModule
+          , transformGeneratedIdentifier transform
+          )
+        | loadedModule <- entryModules
         , name <- loadedModuleNames loadedModule
         , transform <- maybeToList (generatedIdentifierFromName internalModuleNames name)
         , transformOriginalOccurrence transform == "main"
         ]
+
+selectEntryBinding :: [(Bool, String)] -> Either String String
+selectEntryBinding candidates =
+  case localCandidates of
+    [entryBinding] -> Right entryBinding
+    [] ->
+      case allCandidates of
+        [entryBinding] -> Right entryBinding
+        [] -> Left "Could not find transformed internal main binding"
+        bindings -> Left ("Multiple transformed internal main bindings: " ++ show bindings)
+    bindings -> Left ("Multiple transformed local main bindings: " ++ show bindings)
+  where
+    localCandidates = uniqueSorted [binding | (True, binding) <- candidates]
+    allCandidates = uniqueSorted (map snd candidates)
+
+isExecutableEntryModule :: ExecutableInfo -> LoadedModule -> Bool
+isExecutableEntryModule executableInfo loadedModule =
+  case loadedModuleFile loadedModule of
+    Nothing -> False
+    Just filePath -> normalise filePath == normalise (executableMainPath executableInfo)
 
 findGeneratedNameConflict :: [String] -> [LoadedModule] -> Maybe (String, String)
 findGeneratedNameConflict internalModuleNames loadedModules =

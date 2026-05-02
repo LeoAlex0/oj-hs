@@ -211,6 +211,7 @@ ghcArguments packageInfo executableInfo sourceDirs =
     ++ sourceDirArgs
     ++ packageArgs
     ++ extensionArgs
+    ++ packageLibraryCompilerOptions packageInfo
     ++ executableCompilerOptions executableInfo
   where
     sourceDirArgs =
@@ -227,7 +228,11 @@ ghcArguments packageInfo executableInfo sourceDirs =
             )
         )
     extensionArgs =
-      map ("-X" ++) (executableDefaultExtensions executableInfo)
+      map ("-X" ++) $
+        nub
+          ( packageLibraryDefaultExtensions packageInfo
+              ++ executableDefaultExtensions executableInfo
+          )
 
 withSyntheticPathsModule :: PackageInfo -> ([FilePath] -> IO a) -> IO a
 withSyntheticPathsModule packageInfo action =

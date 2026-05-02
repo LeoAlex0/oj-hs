@@ -3,6 +3,8 @@ module Bundler.SourceBundleSpec where
 import Bundler.Cabal
   ( ExecutableInfo (..)
   , PackageInfo (..)
+  , readPackageInfo
+  , selectExecutable
   )
 import Bundler.Error (BundleError, renderBundleError)
 import Bundler.GHC (LoadedGhcModules (..), loadExecutableModules)
@@ -79,6 +81,66 @@ spec = describe "Bundler.SourceBundle" $ do
       source `shouldSatisfy` ("synthetic Paths_fixture directory functions return current-directory relative paths" `isInfixOf`)
       source `shouldSatisfy` ("getDataFileName" `isInfixOf`)
       source `shouldSatisfy` (not . (packageDir `isInfixOf`))
+      compileGeneratedSource packageDir source
+
+    it "preserves executable Cabal default extensions in generated source" $ \packageDir -> do
+      writeExecutableDefaultExtensionFixturePackage packageDir
+      let info = executableLambdaCaseInfo packageDir
+          pkg = (packageInfo packageDir) {packageExecutables = [info]}
+      loaded <- shouldRightRender (loadExecutableModules pkg info)
+      source <- shouldRightRender (generateSourceBundle pkg info loaded)
+
+      source `shouldSatisfy` ("{-# LANGUAGE LambdaCase #-}" `isInfixOf`)
+      compileGeneratedSource packageDir source
+
+    it "uses library default extensions while loading and rendering" $ \packageDir -> do
+      writeLibraryDefaultExtensionFixturePackage packageDir
+      let info = executableInfo packageDir
+          pkg =
+            (packageInfo packageDir)
+              { packageLibraryDefaultExtensions = ["LambdaCase"]
+              , packageExecutables = [info]
+              }
+      loaded <- shouldRightRender (loadExecutableModules pkg info)
+      source <- shouldRightRender (generateSourceBundle pkg info loaded)
+
+      source `shouldSatisfy` ("{-# LANGUAGE LambdaCase #-}" `isInfixOf`)
+      compileGeneratedSource packageDir source
+
+    it "uses Cabal cpp-options when loading a package description" $ \packageDir -> do
+      writeCabalCppOptionsFixturePackage packageDir
+      pkg <- shouldRightRender (readPackageInfo packageDir)
+      info <- shouldRightRenderPure (selectExecutable (Just "fixture") pkg)
+      loaded <- shouldRightRender (loadExecutableModules pkg info)
+      source <- shouldRightRender (generateSourceBundle pkg info loaded)
+
+      source `shouldSatisfy` (not . ("missingCppOptionBranch" `isInfixOf`))
+      compileGeneratedSource packageDir source
+
+    it "resolves main-is from later executable source dirs" $ \packageDir -> do
+      writeMultiSourceMainFixturePackage packageDir
+      pkg <- shouldRightRender (readPackageInfo packageDir)
+      info <- shouldRightRenderPure (selectExecutable (Just "fixture") pkg)
+
+      executableMainPath info `shouldBe` packageDir </> "app" </> "Main.hs"
+
+    it "does not rewrite external names inside literals" $ \packageDir -> do
+      writeLiteralRewriteFixturePackage packageDir
+      let info = executableInfo packageDir
+          pkg = (packageInfo packageDir) {packageExecutables = [info]}
+      loaded <- shouldRightRender (loadExecutableModules pkg info)
+      source <- shouldRightRender (generateSourceBundle pkg info loaded)
+
+      source `shouldSatisfy` ("\"putStrLn\"" `isInfixOf`)
+      source `shouldSatisfy` (not . ("\"Prelude.putStrLn\"" `isInfixOf`))
+      compileGeneratedSource packageDir source
+
+    it "selects the executable entry when another internal module defines main" $ \packageDir -> do
+      writeInternalHelperMainFixturePackage packageDir
+      loaded <- shouldRightRender (loadExecutableModules (packageInfo packageDir) (executableInfo packageDir))
+      source <- shouldRightRender (generateSourceBundle (packageInfo packageDir) (executableInfo packageDir) loaded)
+
+      source `shouldSatisfy` ("main = fixture_u46_Entry_main" `isInfixOf`)
       compileGeneratedSource packageDir source
 
 writeFixturePackage :: FilePath -> IO ()
@@ -162,6 +224,149 @@ writePathsDataFixturePackage packageDir = do
         ]
     )
 
+writeExecutableDefaultExtensionFixturePackage :: FilePath -> IO ()
+writeExecutableDefaultExtensionFixturePackage packageDir = do
+  createDirectoryIfMissing True (packageDir </> "app")
+  writeFile
+    (packageDir </> "app" </> "Main.hs")
+    ( unlines
+        [ "module Main (main) where"
+        , "main :: IO ()"
+        , "main = print (select (Just 1))"
+        , "select :: Maybe Int -> Int"
+        , "select = \\case"
+        , "  Just value -> value"
+        , "  Nothing -> 0"
+        ]
+    )
+
+writeLibraryDefaultExtensionFixturePackage :: FilePath -> IO ()
+writeLibraryDefaultExtensionFixturePackage packageDir = do
+  createDirectoryIfMissing True (packageDir </> "app")
+  createDirectoryIfMissing True (packageDir </> "src" </> "Fixture")
+  writeFile
+    (packageDir </> "app" </> "Main.hs")
+    ( unlines
+        [ "module Main (main) where"
+        , "import Fixture.Entry (entry)"
+        , "main :: IO ()"
+        , "main = print (entry (Just 1))"
+        ]
+    )
+  writeFile
+    (packageDir </> "src" </> "Fixture" </> "Entry.hs")
+    ( unlines
+        [ "module Fixture.Entry where"
+        , "entry :: Maybe Int -> Int"
+        , "entry = \\case"
+        , "  Just value -> value"
+        , "  Nothing -> 0"
+        ]
+    )
+
+writeCabalCppOptionsFixturePackage :: FilePath -> IO ()
+writeCabalCppOptionsFixturePackage packageDir = do
+  createDirectoryIfMissing True (packageDir </> "app")
+  writeFile
+    (packageDir </> "fixture.cabal")
+    ( unlines
+        [ "cabal-version: 2.2"
+        , "name: fixture"
+        , "version: 0.0.0.0"
+        , "executable fixture"
+        , "  main-is: Main.hs"
+        , "  hs-source-dirs: app"
+        , "  build-depends: base"
+        , "  default-language: Haskell2010"
+        , "  default-extensions: CPP"
+        , "  cpp-options: -DBUNDLER_CPP_OPTION"
+        ]
+    )
+  writeFile
+    (packageDir </> "app" </> "Main.hs")
+    ( unlines
+        [ "module Main (main) where"
+        , "#if defined(BUNDLER_CPP_OPTION)"
+        , "selected :: Int"
+        , "selected = 1"
+        , "#else"
+        , "selected :: Int"
+        , "selected = missingCppOptionBranch"
+        , "#endif"
+        , "main :: IO ()"
+        , "main = print selected"
+        ]
+    )
+
+writeMultiSourceMainFixturePackage :: FilePath -> IO ()
+writeMultiSourceMainFixturePackage packageDir = do
+  createDirectoryIfMissing True (packageDir </> "empty")
+  createDirectoryIfMissing True (packageDir </> "app")
+  writeFile
+    (packageDir </> "fixture.cabal")
+    ( unlines
+        [ "cabal-version: 2.2"
+        , "name: fixture"
+        , "version: 0.0.0.0"
+        , "executable fixture"
+        , "  main-is: Main.hs"
+        , "  hs-source-dirs: empty app"
+        , "  build-depends: base"
+        , "  default-language: Haskell2010"
+        ]
+    )
+  writeFile
+    (packageDir </> "app" </> "Main.hs")
+    ( unlines
+        [ "module Main (main) where"
+        , "main :: IO ()"
+        , "main = pure ()"
+        ]
+    )
+
+writeLiteralRewriteFixturePackage :: FilePath -> IO ()
+writeLiteralRewriteFixturePackage packageDir = do
+  createDirectoryIfMissing True (packageDir </> "app")
+  writeFile
+    (packageDir </> "app" </> "Main.hs")
+    ( unlines
+        [ "module Main (main) where"
+        , "main :: IO ()"
+        , "main = putStrLn \"putStrLn\""
+        ]
+    )
+
+writeInternalHelperMainFixturePackage :: FilePath -> IO ()
+writeInternalHelperMainFixturePackage packageDir = do
+  createDirectoryIfMissing True (packageDir </> "app")
+  createDirectoryIfMissing True (packageDir </> "src" </> "Fixture")
+  writeFile
+    (packageDir </> "app" </> "Main.hs")
+    ( unlines
+        [ "module Main (P.main) where"
+        , "import Fixture.Entry as P (main)"
+        ]
+    )
+  writeFile
+    (packageDir </> "src" </> "Fixture" </> "Entry.hs")
+    ( unlines
+        [ "module Fixture.Entry where"
+        , "import Fixture.Helper (helper)"
+        , "main :: IO ()"
+        , "main = helper"
+        ]
+    )
+  writeFile
+    (packageDir </> "src" </> "Fixture" </> "Helper.hs")
+    ( unlines
+        [ "module Fixture.Helper where"
+        , "helper :: IO ()"
+        , "helper = putStrLn \"entry\""
+        , "main :: IO ()"
+        , "main = putStrLn \"helper\""
+        ]
+    )
+
 compileGeneratedSource :: FilePath -> String -> IO ()
 compileGeneratedSource packageDir =
   compileGeneratedSourceWith packageDir []
@@ -201,6 +406,8 @@ packageInfo packageDir =
     , packageVersionNumbers = [0, 0, 0, 0]
     , packageLibrarySourceDirs = [packageDir </> "src"]
     , packageLibraryDependencyPackageNames = []
+    , packageLibraryDefaultExtensions = []
+    , packageLibraryCompilerOptions = []
     , packageExecutables = [executableInfo packageDir]
     }
 
@@ -234,9 +441,19 @@ pathsDataExecutableInfo :: FilePath -> ExecutableInfo
 pathsDataExecutableInfo =
   executableInfo
 
+executableLambdaCaseInfo :: FilePath -> ExecutableInfo
+executableLambdaCaseInfo packageDir =
+  (executableInfo packageDir)
+    { executableDefaultExtensions = ["LambdaCase"]
+    }
+
 shouldRightRender :: IO (Either BundleError a) -> IO a
 shouldRightRender action = do
   result <- action
+  shouldRightRenderPure result
+
+shouldRightRenderPure :: Either BundleError a -> IO a
+shouldRightRenderPure result =
   case result of
     Right value -> pure value
     Left err -> expectationFailure (renderBundleError err) >> pure (error "unreachable")
