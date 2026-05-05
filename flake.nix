@@ -46,7 +46,10 @@
             haskell-language-server
             ghcid
             cabal-install
+            stylish-haskell
+            hlint
 
+            pkgs.git
             pkgs.openspec
           ];
           # Change the prompt to show that you are in a devShell

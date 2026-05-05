@@ -2,17 +2,18 @@
 
 module Data.Trie (Trie (Trie), empty, insert, elem, toList) where
 
-import Control.DeepSeq (NFData)
-import qualified Data.Map as M
-import qualified Data.Maybe as M
-import GHC.Generics (Generic)
-import Prelude as P hiding (elem)
+import           Control.DeepSeq (NFData)
+import qualified Data.Map        as M
+import qualified Data.Maybe      as M
+import           GHC.Generics    (Generic)
+import           Prelude         as P hiding (elem)
 
 -- | a trie tree, like an compressed strings by its prefix.
-data Trie tok = Trie
-  { ends :: Bool,
-    subTries :: M.Map tok (Trie tok)
-  }
+data Trie tok
+  = Trie
+      { ends     :: Bool
+      , subTries :: M.Map tok (Trie tok)
+      }
   deriving (Eq, Generic, Show)
 
 instance (NFData tok) => NFData (Trie tok)
@@ -40,7 +41,7 @@ insert (t : ts) tree@Trie {subTries = s} =
 elem :: (Eq tok, Ord tok) => [] tok -> Trie tok -> Bool
 elem [] tr = ends tr
 elem (t : ts) Trie {subTries = s} = case M.lookup t s of
-  Nothing -> False
+  Nothing      -> False
   Just subTree -> ts `elem` subTree
 
 -- | toList extract all token from Trie, in lexicographical order

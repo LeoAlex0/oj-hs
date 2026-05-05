@@ -1,0 +1,76 @@
+name: Coverage
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: Generate coverage report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Show flake toolchain
+        run: |
+          nix develop --ignore-environment --command sh -c '
+            ghc --version
+            cabal --version
+            hpc version
+          '
+
+      - name: Update Cabal package index
+        run: nix develop --ignore-environment --command cabal update
+
+      - name: Run tests with coverage
+        run: |
+          nix develop --ignore-environment --command cabal test --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
+
+      - name: Collect coverage report
+        run: |
+          nix develop --ignore-environment --command bash -s <<'EOF'
+          set -euo pipefail
+
+          mkdir -p artifacts/coverage
+
+          package_tix="$(find dist-coverage -path "*/hpc/vanilla/tix/*/*.tix" ! -path "*/oj-hs-test/*" -print -quit)"
+          if [ -z "$package_tix" ]; then
+            echo "Could not find package coverage .tix file" >&2
+            exit 1
+          fi
+
+          package_id="$(basename "$(dirname "$package_tix")")"
+          mix_dir="$(find dist-coverage -path "*/hpc/vanilla/mix/$package_id" -type d -print -quit)"
+          if [ -z "$mix_dir" ]; then
+            echo "Could not find package coverage .mix directory for $package_id" >&2
+            exit 1
+          fi
+
+          hpc report "$package_tix" --hpcdir="$mix_dir" | tee artifacts/coverage/coverage.txt
+
+          html_dir="$(find dist-coverage -path "*/hpc/vanilla/html" -type d -print -quit)"
+          if [ -n "$html_dir" ]; then
+            cp -R "$html_dir" artifacts/coverage/html
+          fi
+          EOF
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: artifacts/coverage
+          if-no-files-found: error

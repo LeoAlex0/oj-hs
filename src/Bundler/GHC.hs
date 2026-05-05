@@ -6,78 +6,65 @@ module Bundler.GHC
   , resolveGhcLibDir
   ) where
 
-import Control.Exception (SomeException, bracket, try)
-import Control.Monad.IO.Class (liftIO)
-import Data.Char (isSpace)
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
-import Data.List (intercalate, nub)
-import Data.Maybe (mapMaybe)
-import Bundler.Cabal (ExecutableInfo (..), PackageInfo (..))
-import Bundler.Error (BundleError (..))
-import GHC.Driver.Monad (pushLogHookM)
-import GHC.Driver.Env (hsc_units)
-import GHC.Types.Error (mkLocMessage)
-import GHC.Data.Graph.Directed (topologicalSortG)
-import GHC
-  ( Ghc
-  , Located
-  , LoadHowMuch (LoadAllTargets)
-  , ModuleGraph
-  , ModSummary
-  , RenamedSource
-  , SuccessFlag (Failed, Succeeded)
-  , TypecheckedSource
-  , getModuleGraph
-  , getSession
-  , getSessionDynFlags
-  , guessTarget
-  , load
-  , moduleNameString
-  , modInfoRdrEnv
-  , moduleInfo
-  , ms_location
-  , ms_mod_name
-  , parseModule
-  , parseDynamicFlags
-  , runGhc
-  , setSessionDynFlags
-  , setTargets
-  , tm_renamed_source
-  , tm_typechecked_source
-  , typecheckModule
-  , unLoc
-  )
-import GHC.Types.SrcLoc (noLoc)
-import GHC.Types.Name.Reader (GlobalRdrEnv)
-import GHC.Unit.Info (unitId, unitPackageNameString)
-import GHC.Unit.Module.Graph
-  ( mgModSummaries'
-  , moduleGraphNodeModSum
-  , moduleGraphNodes
-  , summaryNodeSummary
-  )
-import GHC.Unit.Module.Location (ml_hs_file)
-import GHC.Unit.State (listUnitInfo)
-import GHC.Unit.Types (unitIdString)
-import GHC.Utils.Logger (LogAction, getLogger, log_default_user_context)
-import GHC.Utils.Outputable (renderWithContext)
-import System.Directory (createDirectory, getTemporaryDirectory, removeFile, removePathForcibly)
-import System.Environment (lookupEnv)
-import System.FilePath ((</>))
-import System.IO (hClose, openTempFile)
-import System.Process (readProcess)
+import           Bundler.Cabal            (ExecutableInfo (..),
+                                           PackageInfo (..))
+import           Bundler.Error            (BundleError (..))
+import           Control.Exception        (SomeException, bracket, try)
+import           Control.Monad.IO.Class   (liftIO)
+import           Data.Char                (isSpace)
+import           Data.IORef               (IORef, modifyIORef', newIORef,
+                                           readIORef)
+import           Data.List                (intercalate, nub)
+import           Data.Maybe               (isJust, mapMaybe)
+import           GHC                      (Ghc, LoadHowMuch (LoadAllTargets),
+                                           Located, ModSummary, ModuleGraph,
+                                           RenamedSource,
+                                           SuccessFlag (Failed, Succeeded),
+                                           TypecheckedSource, getModuleGraph,
+                                           getSession, getSessionDynFlags,
+                                           guessTarget, load, modInfoRdrEnv,
+                                           moduleInfo, moduleNameString,
+                                           ms_location, ms_mod_name,
+                                           parseDynamicFlags, parseModule,
+                                           runGhc, setSessionDynFlags,
+                                           setTargets, tm_renamed_source,
+                                           tm_typechecked_source,
+                                           typecheckModule, unLoc)
+import           GHC.Data.Graph.Directed  (topologicalSortG)
+import           GHC.Driver.Env           (hsc_units)
+import           GHC.Driver.Monad         (pushLogHookM)
+import           GHC.Types.Error          (mkLocMessage)
+import           GHC.Types.Name.Reader    (GlobalRdrEnv)
+import           GHC.Types.SrcLoc         (noLoc)
+import           GHC.Unit.Info            (unitId, unitPackageNameString)
+import           GHC.Unit.Module.Graph    (mgModSummaries',
+                                           moduleGraphNodeModSum,
+                                           moduleGraphNodes, summaryNodeSummary)
+import           GHC.Unit.Module.Location (ml_hs_file)
+import           GHC.Unit.State           (listUnitInfo)
+import           GHC.Unit.Types           (unitIdString)
+import           GHC.Utils.Logger         (LogAction, getLogger,
+                                           log_default_user_context)
+import           GHC.Utils.Outputable     (renderWithContext)
+import           System.Directory         (createDirectory,
+                                           getTemporaryDirectory, removeFile,
+                                           removePathForcibly)
+import           System.Environment       (lookupEnv)
+import           System.FilePath          ((</>))
+import           System.IO                (hClose, openTempFile)
+import           System.Process           (readProcess)
 
-newtype GhcConfig = GhcConfig
-  { ghcLibDir :: FilePath
-  }
+newtype GhcConfig
+  = GhcConfig { ghcLibDir :: FilePath }
   deriving (Eq, Show)
 
-data LoadedGhcModules = LoadedGhcModules
-  { loadedGhcConfig :: GhcConfig
-  , loadedGhcArguments :: [String]
-  , loadedUnitPackageNames :: [(String, String)]
-  , loadedModules :: [LoadedModule]
-  }
+data LoadedGhcModules
+  = LoadedGhcModules
+      { loadedGhcConfig        :: GhcConfig
+      , loadedGhcArguments     :: [String]
+      , loadedUnitPackageNames :: [(String, String)]
+      , loadedModules          :: [LoadedModule]
+      }
 
 instance Show LoadedGhcModules where
   show loaded =
@@ -91,15 +78,16 @@ instance Show LoadedGhcModules where
       ++ show (loadedModules loaded)
       ++ " }"
 
-data LoadedModule = LoadedModule
-  { loadedModuleName :: String
-  , loadedModuleFile :: Maybe FilePath
-  , loadedModuleSource :: Maybe String
-  , loadedModuleIsInternal :: Bool
-  , loadedGlobalRdrEnv :: Maybe GlobalRdrEnv
-  , loadedRenamedSource :: Maybe RenamedSource
-  , loadedTypecheckedSource :: Maybe TypecheckedSource
-  }
+data LoadedModule
+  = LoadedModule
+      { loadedModuleName        :: String
+      , loadedModuleFile        :: Maybe FilePath
+      , loadedModuleSource      :: Maybe String
+      , loadedModuleIsInternal  :: Bool
+      , loadedGlobalRdrEnv      :: Maybe GlobalRdrEnv
+      , loadedRenamedSource     :: Maybe RenamedSource
+      , loadedTypecheckedSource :: Maybe TypecheckedSource
+      }
 
 instance Show LoadedModule where
   show loaded =
@@ -108,15 +96,15 @@ instance Show LoadedModule where
       ++ ", loadedModuleFile = "
       ++ show (loadedModuleFile loaded)
       ++ ", loadedModuleSource = "
-      ++ show (maybe False (const True) (loadedModuleSource loaded))
+      ++ show (isJust (loadedModuleSource loaded))
       ++ ", loadedModuleIsInternal = "
       ++ show (loadedModuleIsInternal loaded)
       ++ ", loadedGlobalRdrEnv = "
-      ++ show (maybe False (const True) (loadedGlobalRdrEnv loaded))
+      ++ show (isJust (loadedGlobalRdrEnv loaded))
       ++ ", loadedRenamedSource = "
-      ++ show (maybe False (const True) (loadedRenamedSource loaded))
+      ++ show (isJust (loadedRenamedSource loaded))
       ++ ", loadedTypecheckedSource = "
-      ++ show (maybe False (const True) (loadedTypecheckedSource loaded))
+      ++ show (isJust (loadedTypecheckedSource loaded))
       ++ " }"
 
 loadExecutableModules :: PackageInfo -> ExecutableInfo -> IO (Either BundleError LoadedGhcModules)
@@ -140,7 +128,7 @@ resolveGhcLibDir = do
     _ -> do
       result <- try (readProcess "ghc" ["--print-libdir"] "")
       case result of
-        Left err -> pure (Left (show (err :: SomeException)))
+        Left err     -> pure (Left (show (err :: SomeException)))
         Right output -> pure (Right (trim output))
 
 trim :: String -> String
@@ -319,7 +307,7 @@ toLoadedModule sourceDirs summary = do
       , loadedModuleSource = source
       , loadedModuleIsInternal =
           case sourceFile of
-            Nothing -> False
+            Nothing       -> False
             Just filePath -> any (`isPathPrefixOf` filePath) sourceDirs
       , loadedGlobalRdrEnv = modInfoRdrEnv info
       , loadedRenamedSource = tm_renamed_source typechecked
@@ -340,13 +328,13 @@ normalisePath value =
           else trimmed
 
 isPrefixOfString :: String -> String -> Bool
-isPrefixOfString [] _ = True
-isPrefixOfString _ [] = False
+isPrefixOfString [] _              = True
+isPrefixOfString _ []              = False
 isPrefixOfString (x : xs) (y : ys) = x == y && isPrefixOfString xs ys
 
 unLocString :: Located String -> String
-unLocString located =
-  unLoc located
+unLocString =
+  unLoc
 
 moduleGraphSummariesInDependencyOrder :: ModuleGraph -> [ModSummary]
 moduleGraphSummariesInDependencyOrder moduleGraph =

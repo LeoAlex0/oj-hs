@@ -1,10 +1,10 @@
 module Main (main) where
 
 import qualified Bundler
-import Bundler.Error (renderBundleError)
-import Bundler.Options (parseBundleOptions)
-import System.Exit (exitFailure)
-import System.IO (hPutStrLn, stderr)
+import           Bundler.Error   (renderBundleError)
+import           Bundler.Options (parseBundleOptions)
+import           System.Exit     (exitFailure)
+import           System.IO       (hPutStrLn, stderr)
 
 main :: IO ()
 main = do

@@ -2,12 +2,13 @@ module Bundler
   ( runBundler
   ) where
 
-import Bundler.Env (envPackageInfo, envSelectedExecutable, loadBundleEnv)
-import Bundler.Error (BundleError)
-import Bundler.GHC (loadExecutableModules)
-import Bundler.Options (BundleOptions (..))
-import Bundler.Output (writeBundledSource)
-import Bundler.SourceBundle (generateSourceBundle)
+import           Bundler.Env          (envPackageInfo, envSelectedExecutable,
+                                       loadBundleEnv)
+import           Bundler.Error        (BundleError)
+import           Bundler.GHC          (loadExecutableModules)
+import           Bundler.Options      (BundleOptions (..))
+import           Bundler.Output       (writeBundledSource)
+import           Bundler.SourceBundle (generateSourceBundle)
 
 runBundler :: BundleOptions -> IO (Either BundleError ())
 runBundler options = do
@@ -28,5 +29,5 @@ runBundler options = do
               (envSelectedExecutable env)
               loadedModules
           case sourceResult of
-            Left err -> pure (Left err)
+            Left err     -> pure (Left err)
             Right source -> writeBundledSource (optOutput options) source

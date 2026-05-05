@@ -8,26 +8,21 @@ module Bundler.Rename
   , generatedIdentifierFromName
   ) where
 
-import Data.Char (isAlpha, isAlphaNum, isUpper)
-import Data.Char (ord, toLower, toUpper)
-import Data.Bits (xor)
-import Data.Word (Word64)
-import Data.List (nub, sort)
-import GHC.Types.Name
-  ( Name
-  , isWiredInName
-  , nameModule_maybe
-  , nameOccName
-  )
-import GHC.Types.Name.Occurrence (occNameString)
-import GHC.Types.Name.Occurrence
-  ( OccName
-  , isSymOcc
-  , isVarNameSpace
-  , occNameSpace
-  )
-import GHC.Unit.Types (moduleName)
-import Language.Haskell.Syntax.Module.Name (moduleNameString)
+import           Data.Bits                           (xor)
+import           Data.Char                           (isAlpha, isAlphaNum,
+                                                      isUpper, ord, toLower,
+                                                      toUpper)
+import           Data.List                           (nub, sort)
+import           Data.Word                           (Word64)
+import           GHC.Types.Name                      (Name, isWiredInName,
+                                                      nameModule_maybe,
+                                                      nameOccName)
+import           GHC.Types.Name.Occurrence           (OccName, isSymOcc,
+                                                      isVarNameSpace,
+                                                      occNameSpace,
+                                                      occNameString)
+import           GHC.Unit.Types                      (moduleName)
+import           Language.Haskell.Syntax.Module.Name (moduleNameString)
 
 data NameOrigin
   = InternalName String
@@ -36,18 +31,15 @@ data NameOrigin
   | WiredInName
   deriving (Eq, Show)
 
-data NameTransform = NameTransform
-  { transformOriginalModule :: String
-  , transformOriginalOccurrence :: String
-  , transformGeneratedIdentifier :: String
-  }
+data NameTransform
+  = NameTransform
+      { transformOriginalModule      :: String
+      , transformOriginalOccurrence  :: String
+      , transformGeneratedIdentifier :: String
+      }
   deriving (Eq, Show)
 
-data GeneratedNameCategory
-  = VarIdentifier
-  | ConstructorIdentifier
-  | VariableOperator
-  | ConstructorOperator
+data GeneratedNameCategory = VarIdentifier | ConstructorIdentifier | VariableOperator | ConstructorOperator
 
 classifyName :: [String] -> Name -> NameOrigin
 classifyName internalModules name
@@ -73,7 +65,7 @@ detectNameTransformConflict [] = Nothing
 detectNameTransformConflict (transform : rest) =
   case filter (isGeneratedNameConflict transform) rest of
     conflict : _ -> Just (transform, conflict)
-    [] -> detectNameTransformConflict rest
+    []           -> detectNameTransformConflict rest
 
 isGeneratedNameConflict :: NameTransform -> NameTransform -> Bool
 isGeneratedNameConflict left right =
@@ -140,7 +132,7 @@ categoryFromSpelling [] = VarIdentifier
 
 categoryFromOperatorSpelling :: String -> GeneratedNameCategory
 categoryFromOperatorSpelling (':' : _) = ConstructorOperator
-categoryFromOperatorSpelling _ = VariableOperator
+categoryFromOperatorSpelling _         = VariableOperator
 
 sanitizeIdentifier :: String -> String
 sanitizeIdentifier =
@@ -158,11 +150,11 @@ ensureLeadingAlpha value@(first : _)
   | otherwise = "generated_" ++ value
 
 lowerIdentifier :: String -> String
-lowerIdentifier [] = "generated"
+lowerIdentifier []             = "generated"
 lowerIdentifier (first : rest) = toLower first : rest
 
 upperIdentifier :: String -> String
-upperIdentifier [] = "Generated"
+upperIdentifier []             = "Generated"
 upperIdentifier (first : rest) = toUpper first : rest
 
 stableHashString :: String -> Word64

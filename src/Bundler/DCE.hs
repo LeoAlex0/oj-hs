@@ -4,65 +4,49 @@ module Bundler.DCE
   , pruneByCoreLiveSet
   ) where
 
-import Control.Exception (SomeException, try)
-import Control.Monad.IO.Class (liftIO)
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
-import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
-import qualified Data.Set as Set
-import Bundler.Error (BundleError (GhcLoadFailed, GhcSessionFailed))
-import Bundler.GHC (GhcConfig (..))
-import GHC
-  ( Ghc
-  , LoadHowMuch (LoadAllTargets)
-  , ModSummary
-  , SuccessFlag (Failed, Succeeded)
-  , coreModule
-  , desugarModule
-  , getModuleGraph
-  , getSessionDynFlags
-  , load
-  , moduleNameString
-  , ms_mod_name
-  , parseDynamicFlags
-  , parseModule
-  , runGhc
-  , setSessionDynFlags
-  , setTargets
-  , typecheckModule
-  , unLoc
-  )
-import GHC.Core (CoreProgram, flattenBinds)
-import GHC.Core.FVs (exprFreeIdsList)
-import GHC.Data.StringBuffer (stringToStringBuffer)
-import GHC.Data.Graph.Directed (topologicalSortG)
-import GHC.Driver.Main (hscSimplify)
-import GHC.Driver.Monad (getSession, pushLogHookM)
-import GHC.Driver.Session (homeUnitId_)
-import GHC.Types.Error (mkLocMessage)
-import GHC.Types.Name (nameOccName)
-import GHC.Types.Name.Occurrence (occNameString)
-import GHC.Types.SrcLoc (noLoc)
-import GHC.Types.Target
-  ( Target (..)
-  , TargetId (TargetFile)
-  )
-import GHC.Types.Var (Var, varName)
-import GHC.Unit.Module.Graph
-  ( ModuleGraph
-  , mgModSummaries'
-  , moduleGraphNodeModSum
-  , moduleGraphNodes
-  , summaryNodeSummary
-  )
-import GHC.Unit.Module.ModGuts (mg_binds)
-import Data.Time.Clock (getCurrentTime)
-import GHC.Utils.Logger (LogAction, getLogger, log_default_user_context)
-import GHC.Utils.Outputable (renderWithContext)
+import           Bundler.Error             (BundleError (GhcLoadFailed, GhcSessionFailed))
+import           Bundler.GHC               (GhcConfig (..))
+import           Control.Exception         (SomeException, try)
+import           Control.Monad.IO.Class    (liftIO)
+import           Data.IORef                (IORef, modifyIORef', newIORef,
+                                            readIORef)
+import qualified Data.Map.Strict           as Map
+import           Data.Maybe                (mapMaybe)
+import qualified Data.Set                  as Set
+import           Data.Time.Clock           (getCurrentTime)
+import           GHC                       (Ghc, LoadHowMuch (LoadAllTargets),
+                                            ModSummary,
+                                            SuccessFlag (Failed, Succeeded),
+                                            coreModule, desugarModule,
+                                            getModuleGraph, getSessionDynFlags,
+                                            load, moduleNameString, ms_mod_name,
+                                            parseDynamicFlags, parseModule,
+                                            runGhc, setSessionDynFlags,
+                                            setTargets, typecheckModule, unLoc)
+import           GHC.Core                  (CoreProgram, flattenBinds)
+import           GHC.Core.FVs              (exprFreeIdsList)
+import           GHC.Data.Graph.Directed   (topologicalSortG)
+import           GHC.Data.StringBuffer     (stringToStringBuffer)
+import           GHC.Driver.Main           (hscSimplify)
+import           GHC.Driver.Monad          (getSession, pushLogHookM)
+import           GHC.Driver.Session        (homeUnitId_)
+import           GHC.Types.Error           (mkLocMessage)
+import           GHC.Types.Name            (nameOccName)
+import           GHC.Types.Name.Occurrence (occNameString)
+import           GHC.Types.SrcLoc          (noLoc)
+import           GHC.Types.Target          (Target (..), TargetId (TargetFile))
+import           GHC.Types.Var             (Var, varName)
+import           GHC.Unit.Module.Graph     (ModuleGraph, mgModSummaries',
+                                            moduleGraphNodeModSum,
+                                            moduleGraphNodes,
+                                            summaryNodeSummary)
+import           GHC.Unit.Module.ModGuts   (mg_binds)
+import           GHC.Utils.Logger          (LogAction, getLogger,
+                                            log_default_user_context)
+import           GHC.Utils.Outputable      (renderWithContext)
 
-newtype CoreLiveSet = CoreLiveSet
-  { liveGeneratedIdentifiers :: Set.Set String
-  }
+newtype CoreLiveSet
+  = CoreLiveSet { liveGeneratedIdentifiers :: Set.Set String }
   deriving (Eq, Show)
 
 analyzeCoreLiveSet :: GhcConfig -> [String] -> String -> IO (Either BundleError CoreLiveSet)
@@ -74,7 +58,7 @@ analyzeCoreLiveSet ghcConfig ghcArguments candidateSource = do
           (analyzeCoreLiveSetInSession ghcArguments candidateSource)
       )
   case result of
-    Left err -> pure (Left (GhcLoadFailed (show (err :: SomeException))))
+    Left err    -> pure (Left (GhcLoadFailed (show (err :: SomeException))))
     Right value -> pure value
 
 analyzeCoreLiveSetInSession :: [String] -> String -> Ghc (Either BundleError CoreLiveSet)
@@ -143,7 +127,7 @@ candidateSummary :: [ModSummary] -> Maybe ModSummary
 candidateSummary summaries =
   case filter ((== "Main") . moduleNameString . ms_mod_name) summaries of
     summary : _ -> Just summary
-    [] -> Nothing
+    []          -> Nothing
 
 moduleGraphSummaries :: ModuleGraph -> [ModSummary]
 moduleGraphSummaries moduleGraph =

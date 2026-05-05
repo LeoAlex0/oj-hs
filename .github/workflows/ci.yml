@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Build, test, lint, and style
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Show flake toolchain
+        run: |
+          nix develop --ignore-environment --command sh -c '
+            ghc --version
+            cabal --version
+            stylish-haskell --version
+            hlint --version
+          '
+
+      - name: Update Cabal package index
+        run: nix develop --ignore-environment --command cabal update
+
+      - name: Check Haskell formatting
+        run: |
+          nix develop --ignore-environment --command bash -s <<'EOF'
+          set -euo pipefail
+
+          failed=0
+          while IFS= read -r file; do
+            formatted="$(mktemp)"
+            stylish-haskell "$file" > "$formatted"
+            if ! diff -u "$file" "$formatted"; then
+              failed=1
+            fi
+            rm -f "$formatted"
+          done < <(git ls-files "*.hs")
+
+          exit "$failed"
+          EOF
+
+      - name: Run HLint
+        run: |
+          nix develop --ignore-environment --command bash -s <<'EOF'
+          set -euo pipefail
+
+          mapfile -t files < <(git ls-files "*.hs")
+          hlint "${files[@]}"
+          EOF
+
+      - name: Build all targets
+        run: nix develop --ignore-environment --command cabal build all
+
+      - name: Run unit tests
+        run: nix develop --ignore-environment --command cabal test all --test-show-details=direct

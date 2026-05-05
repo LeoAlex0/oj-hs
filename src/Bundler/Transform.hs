@@ -9,51 +9,51 @@ module Bundler.Transform
   , rewriteRenamedSource
   ) where
 
-import Data.Data (Data, cast, gmapQ, gmapT)
-import Data.Char (isAlpha, isAlphaNum, isSpace, isUpper)
-import Data.List (isInfixOf, isPrefixOf, nub, sort, stripPrefix)
-import Data.Maybe (fromMaybe, maybeToList)
-import Bundler.Rename
-  ( NameOrigin (ExternalName, InternalName, LocalName, WiredInName)
-  , classifyName
-  , generatedIdentifierFromName
-  , transformGeneratedIdentifier
-  )
-import GHC.Data.Bag (bagToList)
-import GHC (RenamedSource)
-import GHC.Types.Name (Name, nameModule_maybe, nameOccName, tidyNameOcc)
-import GHC.Types.Name.Occurrence (OccName, mkOccName, occNameSpace, occNameString)
-import GHC.Types.Name.Reader
-  ( GlobalRdrEnv
-  , greDefinitionModule
-  , gre_imp
-  , is_decl
-  , is_mod
-  , lookupGlobalRdrEnv
-  )
-import GHC.Unit.Types (Module, moduleName, moduleUnitId, unitIdString)
-import GHC.Utils.Outputable
-  ( Depth (AllTheWay)
-  , NamePprCtx (QueryQualify)
-  , QualifyName (NameQual, NameUnqual)
-  , SDoc
-  , alwaysQualifyModules
-  , neverQualify
-  , neverQualifyPackages
-  , ppr
-  , queryQualifyModule
-  , queryQualifyName
-  , queryQualifyPackage
-  , queryPromotionTick
-  , showSDocUnsafe
-  , withUserStyle
-  )
-import Language.Haskell.Syntax.Module.Name (ModuleName, moduleNameString)
+import           Bundler.Rename                      (NameOrigin (ExternalName, InternalName, LocalName, WiredInName),
+                                                      classifyName,
+                                                      generatedIdentifierFromName,
+                                                      transformGeneratedIdentifier)
+import           Data.Char                           (isAlpha, isAlphaNum,
+                                                      isSpace, isUpper)
+import           Data.Data                           (Data, cast, gmapQ, gmapT)
+import           Data.List                           (isInfixOf, isPrefixOf,
+                                                      nub, sort, stripPrefix)
+import           Data.Maybe                          (fromMaybe, maybeToList)
+import           GHC                                 (RenamedSource)
+import           GHC.Data.Bag                        (bagToList)
+import           GHC.Types.Name                      (Name, nameModule_maybe,
+                                                      nameOccName, tidyNameOcc)
+import           GHC.Types.Name.Occurrence           (OccName, mkOccName,
+                                                      occNameSpace,
+                                                      occNameString)
+import           GHC.Types.Name.Reader               (GlobalRdrEnv,
+                                                      greDefinitionModule,
+                                                      gre_imp, is_decl, is_mod,
+                                                      lookupGlobalRdrEnv)
+import           GHC.Unit.Types                      (Module, moduleName,
+                                                      moduleUnitId,
+                                                      unitIdString)
+import           GHC.Utils.Outputable                (Depth (AllTheWay),
+                                                      NamePprCtx (QueryQualify),
+                                                      QualifyName (NameQual, NameUnqual),
+                                                      SDoc,
+                                                      alwaysQualifyModules,
+                                                      neverQualify,
+                                                      neverQualifyPackages, ppr,
+                                                      queryPromotionTick,
+                                                      queryQualifyModule,
+                                                      queryQualifyName,
+                                                      queryQualifyPackage,
+                                                      showSDocUnsafe,
+                                                      withUserStyle)
+import           Language.Haskell.Syntax.Module.Name (ModuleName,
+                                                      moduleNameString)
 
-data ExternalImport = ExternalImport
-  { externalImportPackage :: Maybe String
-  , externalImportModule :: String
-  }
+data ExternalImport
+  = ExternalImport
+      { externalImportPackage :: Maybe String
+      , externalImportModule  :: String
+      }
   deriving (Eq, Ord, Show)
 
 rewriteRenamedSource :: [String] -> RenamedSource -> RenamedSource
@@ -102,10 +102,10 @@ collectExternalIdentifierRewrites internalModules internalGlobalRdrEnvs globalRd
    in unambiguousRewrites
         [ (occurrence, moduleNameString qualifierModule ++ "." ++ occurrence)
         | name <- names
-        , qualifierModule <- maybeToList (qualifierModuleForName internalModules internalGlobalRdrEnvs globalRdrEnv name)
         , let occurrence = occNameString (nameOccName name)
         , isIdentifierOccurrence occurrence
         , occurrence `notElem` localOccurrences
+        , qualifierModule <- maybeToList (qualifierModuleForName internalModules internalGlobalRdrEnvs globalRdrEnv name)
         ]
 
 rewriteName :: [String] -> Name -> Name
@@ -138,7 +138,7 @@ collectNames :: Data a => a -> [Name]
 collectNames value =
   case cast value of
     Just name -> [name]
-    Nothing -> concat (gmapQ collectNames value)
+    Nothing   -> concat (gmapQ collectNames value)
 
 unambiguousRewrites :: [(String, String)] -> [(String, String)]
 unambiguousRewrites rewrites =
@@ -196,7 +196,7 @@ qualifierModuleForModule internalModules internalGlobalRdrEnvs globalRdrEnv name
   | otherwise =
       case resolveImportedQualifier internalModules internalGlobalRdrEnvs nameModuleValue occNameValue [] globalRdrEnv of
         Just importedModule -> Just importedModule
-        Nothing -> Just definingModule
+        Nothing             -> Just definingModule
   where
     definingModule = moduleName nameModuleValue
 
@@ -256,7 +256,7 @@ importedModulesForName nameModuleValue occNameValue globalRdrEnv =
       ]
 
 firstJust :: [Maybe a] -> Maybe a
-firstJust [] = Nothing
+firstJust []               = Nothing
 firstJust (Just value : _) = Just value
 firstJust (Nothing : rest) = firstJust rest
 
@@ -354,7 +354,7 @@ qualifyRecordFieldLine qualifier line =
 shouldQualifyField :: String -> String -> Bool
 shouldQualifyField fieldName afterField =
   not (null fieldName)
-    && not ('.' `elem` fieldName)
+    && notElem '.' fieldName
     && "=" `isPrefixOf` trimLeft afterField
 
 isRecordFieldLine :: String -> Bool
@@ -362,7 +362,7 @@ isRecordFieldLine line =
   case trimLeft line of
     '{' : rest -> hasRecordFieldAssignment rest
     ',' : rest -> hasRecordFieldAssignment rest
-    _ -> False
+    _          -> False
 
 hasRecordFieldAssignment :: String -> Bool
 hasRecordFieldAssignment value =
@@ -374,13 +374,13 @@ startsWithFieldAssignment :: String -> Bool
 startsWithFieldAssignment value =
   case trimLeft value of
     '=' : '=' : _ -> False
-    '=' : _ -> True
-    _ -> False
+    '=' : _       -> True
+    _             -> False
 
 qualifiedConstructorModule :: String -> Maybe String
 qualifiedConstructorModule line =
   case [qualifier | token <- lexicalTokens line, qualifier <- maybeToList (constructorQualifier token)] of
-    [] -> Nothing
+    []         -> Nothing
     qualifiers -> Just (last qualifiers)
 
 constructorQualifier :: String -> Maybe String
@@ -404,17 +404,17 @@ lexicalTokens (char : rest)
 splitOnDot :: String -> [String]
 splitOnDot value =
   case break (== '.') value of
-    (segment, []) -> [segment]
+    (segment, [])          -> [segment]
     (segment, _dot : rest) -> segment : splitOnDot rest
 
 joinWithDot :: [String] -> String
-joinWithDot [] = ""
-joinWithDot [value] = value
+joinWithDot []             = ""
+joinWithDot [value]        = value
 joinWithDot (value : rest) = value ++ "." ++ joinWithDot rest
 
 startsWithUpper :: String -> Bool
 startsWithUpper (first : _) = isUpper first
-startsWithUpper [] = False
+startsWithUpper []          = False
 
 isQualifiedTokenChar :: Char -> Bool
 isQualifiedTokenChar char =
@@ -425,11 +425,11 @@ isRecordFieldChar char =
   isAlphaNum char || char == '_' || char == '\''
 
 (<|>) :: Maybe a -> Maybe a -> Maybe a
-Just value <|> _ = Just value
+Just value <|> _  = Just value
 Nothing <|> other = other
 
 isTopLevelLine :: String -> Bool
-isTopLevelLine [] = False
+isTopLevelLine []          = False
 isTopLevelLine (first : _) = not (isSpace first)
 
 repairQualifiedBinderLine :: String -> String
@@ -465,17 +465,17 @@ stripModuleQualifier :: String -> Maybe String
 stripModuleQualifier token =
   case stripModuleSegments token of
     (True, rest) | not (null rest) -> Just rest
-    _ -> Nothing
+    _                              -> Nothing
 
 stripModuleSegments :: String -> (Bool, String)
 stripModuleSegments value =
   case stripOneModuleSegment value of
-    Nothing -> (False, value)
+    Nothing   -> (False, value)
     Just rest -> go True rest
   where
     go seen rest =
       case stripOneModuleSegment rest of
-        Nothing -> (seen, rest)
+        Nothing       -> (seen, rest)
         Just nextRest -> go True nextRest
 
 stripOneModuleSegment :: String -> Maybe String
@@ -484,7 +484,7 @@ stripOneModuleSegment (first : rest)
       let (_segmentRest, afterSegment) = span isModuleSegmentChar rest
        in case afterSegment of
             '.' : afterDot -> Just afterDot
-            _ -> Nothing
+            _              -> Nothing
 stripOneModuleSegment _ = Nothing
 
 isModuleSegmentChar :: Char -> Bool

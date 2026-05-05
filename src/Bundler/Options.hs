@@ -4,30 +4,17 @@ module Bundler.Options
   , parseBundleOptions
   ) where
 
-import Options.Applicative
-  ( Parser
-  , ParserInfo
-  , execParser
-  , fullDesc
-  , header
-  , help
-  , helper
-  , info
-  , long
-  , metavar
-  , optional
-  , progDesc
-  , short
-  , showDefault
-  , strOption
-  , value
-  )
+import           Options.Applicative (Parser, ParserInfo, execParser, fullDesc,
+                                      header, help, helper, info, long, metavar,
+                                      optional, progDesc, short, showDefault,
+                                      strOption, value)
 
-data BundleOptions = BundleOptions
-  { optExecutable :: Maybe String
-  , optOutput :: FilePath
-  , optPackageDir :: FilePath
-  }
+data BundleOptions
+  = BundleOptions
+      { optExecutable :: Maybe String
+      , optOutput     :: FilePath
+      , optPackageDir :: FilePath
+      }
   deriving (Eq, Show)
 
 parseBundleOptions :: IO BundleOptions

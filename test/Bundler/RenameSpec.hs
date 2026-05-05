@@ -1,17 +1,15 @@
 module Bundler.RenameSpec where
 
-import Bundler.Rename
-  ( NameTransform (transformGeneratedIdentifier, transformOriginalModule)
-  , detectNameTransformConflict
-  , generatedIdentifier
-  )
-import Data.Char (isLower, isUpper)
-import Data.Maybe (isJust)
-import System.Directory (getTemporaryDirectory, removeFile)
-import System.Exit (ExitCode (ExitSuccess))
-import System.IO (hClose, hPutStr, openTempFile)
-import System.Process (readProcessWithExitCode)
-import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
+import           Bundler.Rename   (NameTransform (transformGeneratedIdentifier, transformOriginalModule),
+                                   detectNameTransformConflict,
+                                   generatedIdentifier)
+import           Data.Char        (isLower, isUpper)
+import           Data.Maybe       (isJust)
+import           System.Directory (getTemporaryDirectory, removeFile)
+import           System.Exit      (ExitCode (ExitSuccess))
+import           System.IO        (hClose, hPutStr, openTempFile)
+import           System.Process   (readProcessWithExitCode)
+import           Test.Hspec       (Spec, describe, it, shouldBe, shouldSatisfy)
 
 spec :: Spec
 spec = describe "Bundler.Rename" $ do
@@ -59,7 +57,7 @@ generated moduleName occurrenceName =
 
 startsWith :: (Char -> Bool) -> String -> Bool
 startsWith predicate (first : _) = predicate first
-startsWith _ [] = False
+startsWith _ []                  = False
 
 isVariableOperator :: String -> Bool
 isVariableOperator value@(first : _) =

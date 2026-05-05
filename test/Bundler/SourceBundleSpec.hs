@@ -1,36 +1,24 @@
 module Bundler.SourceBundleSpec where
 
-import Bundler.Cabal
-  ( ExecutableInfo (..)
-  , PackageInfo (..)
-  , readPackageInfo
-  , selectExecutable
-  )
-import Bundler.Error (BundleError, renderBundleError)
-import Bundler.GHC (LoadedGhcModules (..), loadExecutableModules)
-import Bundler.SourceBundle (generateSourceBundle)
-import Control.Exception (finally)
-import Data.List (isInfixOf)
-import System.Directory
-  ( createDirectory
-  , createDirectoryIfMissing
-  , getTemporaryDirectory
-  , removeFile
-  , removePathForcibly
-  )
-import System.Exit (ExitCode (ExitSuccess))
-import System.FilePath ((</>))
-import System.IO (hClose, openTempFile)
-import System.Process (readProcessWithExitCode)
-import Test.Hspec
-  ( Spec
-  , around
-  , describe
-  , expectationFailure
-  , it
-  , shouldBe
-  , shouldSatisfy
-  )
+import           Bundler.Cabal        (ExecutableInfo (..), PackageInfo (..),
+                                       readPackageInfo, selectExecutable)
+import           Bundler.Error        (BundleError, renderBundleError)
+import           Bundler.GHC          (LoadedGhcModules (..),
+                                       loadExecutableModules)
+import           Bundler.SourceBundle (generateSourceBundle)
+import           Control.Exception    (finally)
+import           Data.List            (isInfixOf)
+import           System.Directory     (createDirectory,
+                                       createDirectoryIfMissing,
+                                       getTemporaryDirectory, removeFile,
+                                       removePathForcibly)
+import           System.Exit          (ExitCode (ExitSuccess))
+import           System.FilePath      ((</>))
+import           System.IO            (hClose, openTempFile)
+import           System.Process       (readProcessWithExitCode)
+import           Test.Hspec           (Spec, around, describe,
+                                       expectationFailure, it, shouldBe,
+                                       shouldSatisfy)
 
 spec :: Spec
 spec = describe "Bundler.SourceBundle" $ do

@@ -2,7 +2,7 @@
 
 module Algorithm.Text.SuffixAutomaton where
 
-import Data.List (inits, isSuffixOf)
+import           Data.List   (inits, isSuffixOf)
 import qualified Data.Vector
 
 -- >>> endpos "abcdeabcd" "abc"
@@ -28,6 +28,6 @@ newtype Automaton a
 run :: Automaton a -> [] a -> Maybe (Automaton a)
 run s [] = Just s
 run (Automaton s) xt@(x : xs) = case s x of
-  Accept -> Nothing
+  Accept  -> Nothing
   Hold s' -> run s' xt
   Step s' -> run s' xs

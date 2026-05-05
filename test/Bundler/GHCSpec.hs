@@ -1,23 +1,16 @@
 module Bundler.GHCSpec where
 
-import Bundler.Cabal
-  ( ExecutableInfo (..)
-  , PackageInfo (..)
-  )
-import Bundler.Error (BundleError, renderBundleError)
-import Bundler.GHC (loadExecutableModules)
-import Control.Exception (finally)
-import Data.Either (isRight)
-import Data.List (isInfixOf)
-import System.Directory
-  ( createDirectory
-  , getTemporaryDirectory
-  , removeFile
-  , removePathForcibly
-  )
-import System.FilePath ((</>))
-import System.IO (hClose, openTempFile)
-import Test.Hspec (Spec, around, describe, it, shouldSatisfy)
+import           Bundler.Cabal     (ExecutableInfo (..), PackageInfo (..))
+import           Bundler.Error     (BundleError, renderBundleError)
+import           Bundler.GHC       (loadExecutableModules)
+import           Control.Exception (finally)
+import           Data.Either       (isRight)
+import           Data.List         (isInfixOf)
+import           System.Directory  (createDirectory, getTemporaryDirectory,
+                                    removeFile, removePathForcibly)
+import           System.FilePath   ((</>))
+import           System.IO         (hClose, openTempFile)
+import           Test.Hspec        (Spec, around, describe, it, shouldSatisfy)
 
 spec :: Spec
 spec = describe "Bundler.GHC" $ do
@@ -128,4 +121,4 @@ executableInfo packageDir extensions options extraDependencies =
 
 renderResult :: Either BundleError a -> String
 renderResult (Left err) = renderBundleError err
-renderResult (Right _) = ""
+renderResult (Right _)  = ""

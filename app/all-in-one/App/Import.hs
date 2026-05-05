@@ -4,6 +4,6 @@ module App.Import
   )
 where
 
-import App.Types
-import Control.Lens
-import RIO
+import           App.Types
+import           Control.Lens
+import           RIO

@@ -1,5 +1,21 @@
 # luogu
 
+[![CI](https://github.com/LeoAlex0/oj-hs/actions/workflows/ci.yml/badge.svg)](https://github.com/LeoAlex0/oj-hs/actions/workflows/ci.yml)
+[![Coverage](https://github.com/LeoAlex0/oj-hs/actions/workflows/coverage.yml/badge.svg)](https://github.com/LeoAlex0/oj-hs/actions/workflows/coverage.yml)
+[![Benchmark](https://github.com/LeoAlex0/oj-hs/actions/workflows/benchmark.yml/badge.svg)](https://github.com/LeoAlex0/oj-hs/actions/workflows/benchmark.yml)
+
+## Pipeline artifacts
+
+CI uses the repository Nix flake as the source of truth for the Haskell
+toolchain. For a specific commit, open the corresponding workflow run in
+GitHub Actions:
+
+- Coverage results are uploaded by the Coverage workflow as the
+  `coverage-report` artifact, including `coverage.txt` and the generated HPC
+  HTML report.
+- Benchmark results are uploaded by the Benchmark workflow as the
+  `benchmark-report` artifact, including `bench.html` and `bench.json`.
+
 ## haskell-bundler
 
 `haskell-bundler` bundles one package executable and its reachable internal

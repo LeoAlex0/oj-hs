@@ -2,10 +2,10 @@ module Bundler.Output
   ( writeBundledSource
   ) where
 
-import Control.Exception (SomeException, try)
-import Bundler.Error (BundleError (OutputWriteFailed))
-import System.Directory (createDirectoryIfMissing)
-import System.FilePath (takeDirectory)
+import           Bundler.Error     (BundleError (OutputWriteFailed))
+import           Control.Exception (SomeException, try)
+import           System.Directory  (createDirectoryIfMissing)
+import           System.FilePath   (takeDirectory)
 
 writeBundledSource :: FilePath -> String -> IO (Either BundleError ())
 writeBundledSource path source = do

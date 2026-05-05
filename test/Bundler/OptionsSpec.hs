@@ -1,14 +1,10 @@
 module Bundler.OptionsSpec where
 
-import Bundler.Options (BundleOptions (..), bundleOptionsParser)
-import Options.Applicative
-  ( ParserResult (..)
-  , defaultPrefs
-  , execParserPure
-  , fullDesc
-  , info
-  )
-import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
+import           Bundler.Options     (BundleOptions (..), bundleOptionsParser)
+import           Options.Applicative (ParserResult (..), defaultPrefs,
+                                      execParserPure, fullDesc, info)
+import           Test.Hspec          (Spec, describe, it, shouldBe,
+                                      shouldSatisfy)
 
 spec :: Spec
 spec = describe "Bundler.Options" $ do
@@ -26,10 +22,10 @@ spec = describe "Bundler.Options" $ do
 parseOptions :: [String] -> Either String BundleOptions
 parseOptions args =
   case execParserPure defaultPrefs (info bundleOptionsParser fullDesc) args of
-    Success options -> Right options
-    Failure failure -> Left (show failure)
+    Success options              -> Right options
+    Failure failure              -> Left (show failure)
     CompletionInvoked completion -> Left (show completion)
 
 isParseFailure :: Either String BundleOptions -> Bool
-isParseFailure (Left _) = True
+isParseFailure (Left _)  = True
 isParseFailure (Right _) = False

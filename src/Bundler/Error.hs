@@ -3,7 +3,7 @@ module Bundler.Error
   , renderBundleError
   ) where
 
-import Data.List (intercalate)
+import           Data.List (intercalate)
 
 data BundleError
   = PackageDirectoryNotFound FilePath
@@ -52,5 +52,5 @@ renderBundleError err =
       "Failed to generate bundled source:\n" ++ message
 
 renderAvailable :: [String] -> String
-renderAvailable [] = "(none)"
+renderAvailable []    = "(none)"
 renderAvailable names = intercalate ", " names

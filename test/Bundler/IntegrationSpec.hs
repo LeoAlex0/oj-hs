@@ -1,34 +1,19 @@
 module Bundler.IntegrationSpec where
 
-import Bundler (runBundler)
-import Bundler.Cabal
-  ( ExecutableInfo (..)
-  , PackageInfo (..)
-  , readPackageInfo
-  , selectExecutable
-  )
-import Bundler.Options (BundleOptions (..))
-import Control.Exception (finally)
-import Data.List (isInfixOf, nub)
-import System.Directory
-  ( createDirectory
-  , getTemporaryDirectory
-  , removeFile
-  , removePathForcibly
-  )
-import System.Exit (ExitCode (ExitSuccess))
-import System.FilePath ((</>))
-import System.IO (hClose, openTempFile)
-import System.Process (readProcessWithExitCode)
-import Test.Hspec
-  ( Spec
-  , around
-  , describe
-  , expectationFailure
-  , it
-  , shouldBe
-  , shouldSatisfy
-  )
+import           Bundler           (runBundler)
+import           Bundler.Cabal     (ExecutableInfo (..), PackageInfo (..),
+                                    readPackageInfo, selectExecutable)
+import           Bundler.Options   (BundleOptions (..))
+import           Control.Exception (finally)
+import           Data.List         (isInfixOf, nub)
+import           System.Directory  (createDirectory, getTemporaryDirectory,
+                                    removeFile, removePathForcibly)
+import           System.Exit       (ExitCode (ExitSuccess))
+import           System.FilePath   ((</>))
+import           System.IO         (hClose, openTempFile)
+import           System.Process    (readProcessWithExitCode)
+import           Test.Hspec        (Spec, around, describe, expectationFailure,
+                                    it, shouldBe, shouldSatisfy)
 
 spec :: Spec
 spec = describe "haskell-bundler integration" $ do
@@ -163,7 +148,7 @@ shouldRightPure :: Show err => Either err a -> IO a
 shouldRightPure result =
   case result of
     Right value -> pure value
-    Left err -> expectationFailure (show err) >> pure (error "unreachable")
+    Left err    -> expectationFailure (show err) >> pure (error "unreachable")
 
 withTempPackageDir :: (FilePath -> IO a) -> IO a
 withTempPackageDir action = do

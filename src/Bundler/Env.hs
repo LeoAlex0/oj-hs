@@ -3,21 +3,18 @@ module Bundler.Env
   , loadBundleEnv
   ) where
 
-import Bundler.Cabal
-  ( ExecutableInfo
-  , PackageInfo
-  , readPackageInfo
-  , selectExecutable
-  )
-import Bundler.GHC (LoadedGhcModules)
-import Bundler.Error (BundleError)
-import Bundler.Options (BundleOptions (..))
+import           Bundler.Cabal   (ExecutableInfo, PackageInfo, readPackageInfo,
+                                  selectExecutable)
+import           Bundler.Error   (BundleError)
+import           Bundler.GHC     (LoadedGhcModules)
+import           Bundler.Options (BundleOptions (..))
 
-data BundlerEnv = BundlerEnv
-  { envPackageInfo :: PackageInfo
-  , envSelectedExecutable :: ExecutableInfo
-  , envLoadedModules :: Maybe LoadedGhcModules
-  }
+data BundlerEnv
+  = BundlerEnv
+      { envPackageInfo        :: PackageInfo
+      , envSelectedExecutable :: ExecutableInfo
+      , envLoadedModules      :: Maybe LoadedGhcModules
+      }
 
 loadBundleEnv :: BundleOptions -> IO (Either BundleError BundlerEnv)
 loadBundleEnv options = do

@@ -2,57 +2,62 @@ module Bundler.SourceBundle
   ( generateSourceBundle
   ) where
 
-import Data.Char (isSpace)
-import Data.List (isInfixOf, isPrefixOf, isSuffixOf, nub, sort, stripPrefix)
-import Data.Maybe (maybeToList)
-import qualified Data.Set as Set
-import Bundler.Cabal (ExecutableInfo (..), PackageInfo (..))
-import Bundler.DCE (CoreLiveSet (..), analyzeCoreLiveSet)
-import Bundler.Error (BundleError (GhcLoadFailed, SourceBundleFailed, SymbolConflict))
-import Bundler.GHC (LoadedGhcModules (..), LoadedModule (..))
-import Bundler.Rename
-  ( NameTransform
-  , generatedIdentifierFromName
-  , transformGeneratedIdentifier
-  , transformOriginalModule
-  , transformOriginalOccurrence
-  )
-import Bundler.Transform
-  ( ExternalImport (..)
-  , collectRenderedExternalImports
-  , collectExternalIdentifierRewrites
-  , collectRenamedNames
-  , renderRenamedDeclarations
-  )
-import GHC.Types.Name (Name, nameOccName)
-import GHC.Types.Name.Occurrence (NameSpace, occNameSpace, occNameString)
-import GHC.Types.Name.Reader (GlobalRdrEnv)
-import System.FilePath (normalise)
+import           Bundler.Cabal             (ExecutableInfo (..),
+                                            PackageInfo (..))
+import           Bundler.DCE               (CoreLiveSet (..),
+                                            analyzeCoreLiveSet)
+import           Bundler.Error             (BundleError (GhcLoadFailed, SourceBundleFailed, SymbolConflict))
+import           Bundler.GHC               (LoadedGhcModules (..),
+                                            LoadedModule (..))
+import           Bundler.Rename            (NameTransform,
+                                            generatedIdentifierFromName,
+                                            transformGeneratedIdentifier,
+                                            transformOriginalModule,
+                                            transformOriginalOccurrence)
+import           Bundler.Transform         (ExternalImport (..),
+                                            collectExternalIdentifierRewrites,
+                                            collectRenamedNames,
+                                            collectRenderedExternalImports,
+                                            renderRenamedDeclarations)
+import           Data.Char                 (isAsciiLower, isAsciiUpper, isDigit,
+                                            isSpace)
+import           Data.List                 (isInfixOf, isPrefixOf, isSuffixOf,
+                                            nub, sort, stripPrefix)
+import           Data.Maybe                (fromMaybe, maybeToList)
+import qualified Data.Set                  as Set
+import           GHC.Types.Name            (Name, nameOccName)
+import           GHC.Types.Name.Occurrence (NameSpace, occNameSpace,
+                                            occNameString)
+import           GHC.Types.Name.Reader     (GlobalRdrEnv)
+import           System.FilePath           (normalise)
 
-data SourceModule = SourceModule
-  { sourceModuleName :: String
-  , sourceModulePragmas :: [String]
-  , sourceModuleDeclarationGroups :: [DeclarationGroup]
-  }
+data SourceModule
+  = SourceModule
+      { sourceModuleName              :: String
+      , sourceModulePragmas           :: [String]
+      , sourceModuleDeclarationGroups :: [DeclarationGroup]
+      }
   deriving (Eq, Show)
 
-data DeclarationGroup = DeclarationGroup
-  { declarationGroupId :: String
-  , declarationGroupLines :: [String]
-  , declarationGroupMappings :: [DeclarationMapping]
-  , declarationGroupDefinedIdentifiers :: [String]
-  , declarationGroupReferencedIdentifiers :: [String]
-  , declarationGroupCanPrune :: Bool
-  , declarationGroupRequiresOpaqueEitherHelper :: Bool
-  }
+data DeclarationGroup
+  = DeclarationGroup
+      { declarationGroupId                         :: String
+      , declarationGroupLines                      :: [String]
+      , declarationGroupMappings                   :: [DeclarationMapping]
+      , declarationGroupDefinedIdentifiers         :: [String]
+      , declarationGroupReferencedIdentifiers      :: [String]
+      , declarationGroupCanPrune                   :: Bool
+      , declarationGroupRequiresOpaqueEitherHelper :: Bool
+      }
   deriving (Eq, Show)
 
-data DeclarationMapping = DeclarationMapping
-  { mappingOriginalModule :: String
-  , mappingOriginalOccurrence :: String
-  , mappingGeneratedIdentifier :: String
-  , mappingDeclarationGroup :: String
-  }
+data DeclarationMapping
+  = DeclarationMapping
+      { mappingOriginalModule      :: String
+      , mappingOriginalOccurrence  :: String
+      , mappingGeneratedIdentifier :: String
+      , mappingDeclarationGroup    :: String
+      }
   deriving (Eq, Ord, Show)
 
 generateSourceBundle ::
@@ -234,7 +239,7 @@ renderQualifiedImport externalImport =
 usesPackageImport :: ExternalImport -> Bool
 usesPackageImport externalImport =
   case externalImportPackage externalImport of
-    Just _ -> True
+    Just _  -> True
     Nothing -> False
 
 renderOpaqueEitherHelper :: [SourceModule] -> [String]
@@ -276,8 +281,8 @@ syntheticPathsModuleNotes packageInfo sourceModules =
   ]
 
 usesSyntheticPathsDirectoryFunction :: String -> [SourceModule] -> Bool
-usesSyntheticPathsDirectoryFunction pathsModuleName sourceModules =
-  any (sourceModuleUsesSyntheticPathsDirectoryFunction pathsModuleName) sourceModules
+usesSyntheticPathsDirectoryFunction pathsModuleName =
+  any (sourceModuleUsesSyntheticPathsDirectoryFunction pathsModuleName)
 
 sourceModuleUsesSyntheticPathsDirectoryFunction :: String -> SourceModule -> Bool
 sourceModuleUsesSyntheticPathsDirectoryFunction pathsModuleName sourceModule =
@@ -335,7 +340,7 @@ uniqueExternalImports externalImports =
     selectedImport moduleName =
       case sort (nub [packageName | externalImport <- externalImports, externalImportModule externalImport == moduleName, packageName <- maybeToList (externalImportPackage externalImport)]) of
         packageName : _ -> ExternalImport (Just packageName) moduleName
-        [] -> ExternalImport Nothing moduleName
+        []              -> ExternalImport Nothing moduleName
 
 loadedModuleNames :: LoadedModule -> [Name]
 loadedModuleNames loadedModule =
@@ -370,7 +375,7 @@ rewriteIdentifierToken mappings token =
        , identifierTokenMatches mapping token
        ] of
     replacement : _ -> replacement
-    [] -> token
+    []              -> token
 
 identifierTokenMatches :: DeclarationMapping -> String -> Bool
 identifierTokenMatches mapping token =
@@ -392,22 +397,22 @@ applyExternalIdentifierRewrites rewrites =
 isEquationHeadLine :: String -> String -> Bool
 isEquationHeadLine line next =
   case splitExternalRewriteBoundary line of
-    Just _ -> False
+    Just _  -> False
     Nothing -> startsWithBindingHead line && startsWithAssignmentLine next
 
 startsWithBindingHead :: String -> Bool
 startsWithBindingHead line =
   case trimLeft line of
     first : _ -> isIdentifierChar first
-    [] -> False
+    []        -> False
 
 startsWithAssignmentLine :: String -> Bool
 startsWithAssignmentLine line =
   case trimLeft line of
     '=' : '=' : _ -> False
     '=' : '>' : _ -> False
-    '=' : _ -> True
-    _ -> False
+    '=' : _       -> True
+    _             -> False
 
 rewriteExternalIdentifierLine :: [(String, String)] -> String -> String
 rewriteExternalIdentifierLine rewrites line =
@@ -425,11 +430,11 @@ splitExternalRewriteBoundary :: String -> Maybe (String, String, String)
 splitExternalRewriteBoundary line =
   case firstSignatureBoundary line of
     Just boundary -> Just boundary
-    Nothing -> firstAssignmentBoundary line
+    Nothing       -> firstAssignmentBoundary line
 
 firstSignatureBoundary :: String -> Maybe (String, String, String)
-firstSignatureBoundary line =
-  go [] line
+firstSignatureBoundary =
+  go []
   where
     go _ [] = Nothing
     go reversedPrefix remaining@('"' : _) =
@@ -444,8 +449,8 @@ firstSignatureBoundary line =
       go (char : reversedPrefix) rest
 
 firstAssignmentBoundary :: String -> Maybe (String, String, String)
-firstAssignmentBoundary line =
-  go Nothing [] line
+firstAssignmentBoundary =
+  go Nothing []
   where
     go _ _ [] = Nothing
     go _ reversedPrefix remaining@('"' : _) =
@@ -476,10 +481,7 @@ rewriteExternalIdentifierTokens rewrites =
 rewriteExternalIdentifierToken :: [(String, String)] -> String -> String
 rewriteExternalIdentifierToken rewrites token
   | '.' `elem` token = token
-  | otherwise =
-      case lookup token rewrites of
-        Just replacement -> replacement
-        Nothing -> token
+  | otherwise = fromMaybe token (lookup token rewrites)
 
 rewriteHaskellLineIdentifierTokens :: (String -> String) -> String -> String
 rewriteHaskellLineIdentifierTokens rewrite =
@@ -529,8 +531,8 @@ consumeQuoted quote (char : rest)
        in (char : body, next, closed)
 
 lastMaybe :: [a] -> Maybe a
-lastMaybe [] = Nothing
-lastMaybe [value] = Just value
+lastMaybe []         = Nothing
+lastMaybe [value]    = Just value
 lastMaybe (_ : rest) = lastMaybe rest
 
 repairOpaqueEitherConstructorsInSourceModules :: [SourceModule] -> [SourceModule]
@@ -592,7 +594,7 @@ firstConstructorToken (line : rest) =
   case trimLeft line of
     '(' : value ->
       case takeWhile isQualifiedIdentifierChar value of
-        [] -> firstConstructorToken rest
+        []    -> firstConstructorToken rest
         token -> Just token
     _ -> firstConstructorToken rest
 
@@ -620,18 +622,18 @@ replaceLineSuffix suffix replacement line =
       reversedLine = reverse line
    in case stripPrefix reversedSuffix reversedLine of
         Just reversedPrefix -> reverse reversedPrefix ++ replacement
-        Nothing -> line
+        Nothing             -> line
 
 lastToken :: String -> String
 lastToken value =
   case words value of
-    [] -> ""
+    []     -> ""
     tokens -> last tokens
 
 lastIdentifierSegment :: String -> String
 lastIdentifierSegment token =
   case break (== '.') token of
-    (_segment, []) -> token
+    (_segment, [])          -> token
     (_segment, _dot : rest) -> lastIdentifierSegment rest
 
 buildDeclarationGroups :: String -> [DeclarationMapping] -> [String] -> [DeclarationGroup]
@@ -726,7 +728,7 @@ splitTopLevelDeclarationGroups =
 isTopLevelDeclarationLine :: String -> Bool
 isTopLevelDeclarationLine line =
   case line of
-    [] -> False
+    []        -> False
     first : _ -> not (isSpace first)
 
 declaredGeneratedIdentifiers :: [String] -> [String] -> [String]
@@ -796,8 +798,8 @@ generatedIdentifierTokens (char : rest)
   | otherwise = generatedIdentifierTokens rest
 
 beforeToken :: String -> String -> Maybe String
-beforeToken token value =
-  go [] value
+beforeToken token =
+  go []
   where
     go _ [] = Nothing
     go reversedPrefix remaining@(next : rest)
@@ -808,7 +810,7 @@ firstToken :: String -> String
 firstToken value =
   case generatedIdentifierTokens value of
     token : _ -> token
-    [] -> ""
+    []        -> ""
 
 startsWithAny :: [String] -> String -> Bool
 startsWithAny prefixes value =
@@ -824,13 +826,11 @@ isQualifiedIdentifierChar char =
 
 isAlphaNumAscii :: Char -> Bool
 isAlphaNumAscii char =
-  ('a' <= char && char <= 'z')
-    || ('A' <= char && char <= 'Z')
-    || ('0' <= char && char <= '9')
+  isAsciiLower char || isAsciiUpper char || isDigit char
 
 isOperatorIdentifier :: String -> Bool
 isOperatorIdentifier (first : _) = isOperatorChar first
-isOperatorIdentifier [] = False
+isOperatorIdentifier []          = False
 
 isOperatorChar :: Char -> Bool
 isOperatorChar char =
@@ -842,7 +842,7 @@ findEntryBinding internalModuleNames executableInfo loadedModules =
   where
     entryModules =
       case filter (isExecutableEntryModule executableInfo) loadedModules of
-        [] -> filter ((== "Main") . loadedModuleName) loadedModules
+        []      -> filter ((== "Main") . loadedModuleName) loadedModules
         modules -> modules
     entryCandidates =
       sort . nub $

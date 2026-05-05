@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FunctionalDependencies #-}
 
 module Data.SegTree
@@ -11,9 +11,9 @@ module Data.SegTree
   )
 where
 
-import Control.DeepSeq (NFData)
-import Data.List (unfoldr)
-import GHC.Generics (Generic)
+import           Control.DeepSeq (NFData)
+import           Data.List       (unfoldr)
+import           GHC.Generics    (Generic)
 
 class Action a v | v -> a where
   action :: a -> v -> v
@@ -27,12 +27,12 @@ instance (NFData a, NFData v) => NFData (SegTree a v)
 
 {-# INLINE size #-}
 size :: SegTree a v -> Int
-size (Leaf _) = 1
+size (Leaf _)           = 1
 size (Branch l _ _ _ _) = l
 
 {-# INLINE queryAll #-}
 queryAll :: SegTree a v -> v
-queryAll (Leaf v) = v
+queryAll (Leaf v)           = v
 queryAll (Branch _ _ v _ _) = v
 
 query :: (Monoid v, Action a v) => Int -> Int -> SegTree a v -> v
@@ -72,7 +72,7 @@ fromList xs = root
     leaves = Leaf <$> xs
     ([root] : _) = dropWhile (not . null . tail) $ iterate (unfoldr buildUp) leaves
     branch l r = Branch (size l + size r) mempty (queryAll l <> queryAll r) l r
-    buildUp [] = Nothing
-    buildUp [x] = Just (x, [])
-    buildUp [x, y, z] = Just ((x `branch` y) `branch` z, [])
+    buildUp []             = Nothing
+    buildUp [x]            = Just (x, [])
+    buildUp [x, y, z]      = Just ((x `branch` y) `branch` z, [])
     buildUp (x : y : rest) = Just (x `branch` y, rest)

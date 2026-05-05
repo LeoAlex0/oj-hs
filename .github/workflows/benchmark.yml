@@ -1,0 +1,49 @@
+name: Benchmark
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Generate benchmark report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Show flake toolchain
+        run: |
+          nix develop --ignore-environment --command sh -c '
+            ghc --version
+            cabal --version
+          '
+
+      - name: Update Cabal package index
+        run: nix develop --ignore-environment --command cabal update
+
+      - name: Run benchmarks
+        run: |
+          nix develop --ignore-environment --command cabal bench --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--output bench.html --json bench.json --time-limit 1'
+
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-report
+          path: |
+            bench.html
+            bench.json
+          if-no-files-found: error

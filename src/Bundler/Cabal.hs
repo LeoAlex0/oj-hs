@@ -5,67 +5,75 @@ module Bundler.Cabal
   , selectExecutable
   ) where
 
-import Control.Exception (SomeException, try)
-import Control.Monad (filterM)
-import Data.List (sort)
-import Distribution.Compiler (CompilerFlavor (GHC), PerCompilerFlavor (PerCompilerFlavor))
-import Distribution.PackageDescription
-  ( BuildInfo
-  , Executable
-  , buildInfo
-  , condExecutables
-  , defaultExtensions
-  , executables
-  , exeName
-  , hsSourceDirs
-  , includeDirs
-  , libBuildInfo
-  , library
-  , modulePath
-  , cppOptions
-  , oldExtensions
-  , options
-  , package
-  , targetBuildDepends
-  )
-import Distribution.Package (pkgName, pkgVersion)
-import Distribution.PackageDescription.Configuration (flattenPackageDescription)
-import Distribution.Pretty (prettyShow)
-import Distribution.Simple.PackageDescription (readGenericPackageDescription)
-import Distribution.Types.Dependency (depPkgName)
-import Distribution.Types.PackageName (unPackageName)
-import Distribution.Types.UnqualComponentName (unUnqualComponentName)
-import Distribution.Types.Version (versionNumbers)
-import Distribution.Utils.Path (getSymbolicPath)
-import Distribution.Verbosity (silent)
-import Bundler.Error (BundleError (..))
-import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
-import System.FilePath ((</>), normalise, takeExtension, takeFileName)
+import           Bundler.Error                                 (BundleError (..))
+import           Control.Exception                             (SomeException,
+                                                                try)
+import           Control.Monad                                 (filterM)
+import           Data.List                                     (sort)
+import           Distribution.Compiler                         (CompilerFlavor (GHC),
+                                                                PerCompilerFlavor (PerCompilerFlavor))
+import           Distribution.Package                          (pkgName,
+                                                                pkgVersion)
+import           Distribution.PackageDescription               (BuildInfo,
+                                                                Executable,
+                                                                buildInfo,
+                                                                condExecutables,
+                                                                cppOptions,
+                                                                defaultExtensions,
+                                                                exeName,
+                                                                executables,
+                                                                hsSourceDirs,
+                                                                includeDirs,
+                                                                libBuildInfo,
+                                                                library,
+                                                                modulePath,
+                                                                oldExtensions,
+                                                                options,
+                                                                package,
+                                                                targetBuildDepends)
+import           Distribution.PackageDescription.Configuration (flattenPackageDescription)
+import           Distribution.Pretty                           (prettyShow)
+import           Distribution.Simple.PackageDescription        (readGenericPackageDescription)
+import           Distribution.Types.Dependency                 (depPkgName)
+import           Distribution.Types.PackageName                (unPackageName)
+import           Distribution.Types.UnqualComponentName        (unUnqualComponentName)
+import           Distribution.Types.Version                    (versionNumbers)
+import           Distribution.Utils.Path                       (getSymbolicPath)
+import           Distribution.Verbosity                        (silent)
+import           System.Directory                              (doesDirectoryExist,
+                                                                doesFileExist,
+                                                                listDirectory)
+import           System.FilePath                               (normalise,
+                                                                takeExtension,
+                                                                takeFileName,
+                                                                (</>))
 
-data PackageInfo = PackageInfo
-  { packageRoot :: FilePath
-  , packageCabalFile :: FilePath
-  , packageName :: String
-  , packageDisplayName :: String
-  , packagePathsModuleName :: String
-  , packageVersionNumbers :: [Int]
-  , packageLibrarySourceDirs :: [FilePath]
-  , packageLibraryDependencyPackageNames :: [String]
-  , packageLibraryDefaultExtensions :: [String]
-  , packageLibraryCompilerOptions :: [String]
-  , packageExecutables :: [ExecutableInfo]
-  }
+data PackageInfo
+  = PackageInfo
+      { packageRoot                          :: FilePath
+      , packageCabalFile                     :: FilePath
+      , packageName                          :: String
+      , packageDisplayName                   :: String
+      , packagePathsModuleName               :: String
+      , packageVersionNumbers                :: [Int]
+      , packageLibrarySourceDirs             :: [FilePath]
+      , packageLibraryDependencyPackageNames :: [String]
+      , packageLibraryDefaultExtensions      :: [String]
+      , packageLibraryCompilerOptions        :: [String]
+      , packageExecutables                   :: [ExecutableInfo]
+      }
   deriving (Eq, Show)
 
-data ExecutableInfo = ExecutableInfo
-  { executableName :: String
-  , executableMainPath :: FilePath
-  , executableSourceDirs :: [FilePath]
-  , executableDependencies :: [String]
-  , executableDependencyPackageNames :: [String]
-  , executableDefaultExtensions :: [String]
-  , executableCompilerOptions :: [String]
-  }
+data ExecutableInfo
+  = ExecutableInfo
+      { executableName                   :: String
+      , executableMainPath               :: FilePath
+      , executableSourceDirs             :: [FilePath]
+      , executableDependencies           :: [String]
+      , executableDependencyPackageNames :: [String]
+      , executableDefaultExtensions      :: [String]
+      , executableCompilerOptions        :: [String]
+      }
   deriving (Eq, Show)
 
 readPackageInfo :: FilePath -> IO (Either BundleError PackageInfo)
@@ -168,7 +176,7 @@ resolveExecutableMainPath :: FilePath -> [FilePath] -> FilePath -> IO FilePath
 resolveExecutableMainPath packageDir sourceDirs mainFile = do
   let candidateDirs =
         case sourceDirs of
-          [] -> [normalise packageDir]
+          []   -> [normalise packageDir]
           dirs -> dirs
       candidates = map (normalise . (</> mainFile)) candidateDirs
   existing <- filterM doesFileExist candidates
@@ -178,7 +186,7 @@ resolveExecutableMainPath packageDir sourceDirs mainFile = do
         [] ->
           case candidates of
             path : _ -> path
-            [] -> normalise (packageDir </> mainFile)
+            []       -> normalise (packageDir </> mainFile)
     )
 
 dependencyPackageNames :: BuildInfo -> [String]
@@ -190,13 +198,13 @@ pathsModuleNameForPackage packageNameValue =
   "Paths_" ++ map packageNameModuleChar packageNameValue
 
 packageNameModuleChar :: Char -> Char
-packageNameModuleChar '-' = '_'
+packageNameModuleChar '-'  = '_'
 packageNameModuleChar char = char
 
 sourceDirectories :: FilePath -> BuildInfo -> [FilePath]
 sourceDirectories packageDir info =
   case hsSourceDirs info of
-    [] -> [normalise packageDir]
+    []   -> [normalise packageDir]
     dirs -> map (normalise . (packageDir </>) . getSymbolicPath) dirs
 
 buildInfoDefaultExtensions :: BuildInfo -> [String]
@@ -232,4 +240,4 @@ orderExecutables orderedNames unorderedExecutables =
 
 ghcOptionsFor :: CompilerFlavor -> [String] -> [String]
 ghcOptionsFor GHC ghcOptions = ghcOptions
-ghcOptionsFor _ ghcOptions = ghcOptions
+ghcOptionsFor _ ghcOptions   = ghcOptions

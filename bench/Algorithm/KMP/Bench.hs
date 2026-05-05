@@ -1,10 +1,10 @@
 module Algorithm.KMP.Bench (benchST) where
 
-import Algorithm.Text.KMP (Automaton, compile)
-import Control.Monad (replicateM)
-import Criterion (bench, bgroup, env, nfAppIO)
-import Data.Automaton (run)
-import System.Random (randomIO)
+import           Algorithm.Text.KMP (Automaton, compile)
+import           Control.Monad      (replicateM)
+import           Criterion          (bench, bgroup, env, nfAppIO)
+import           Data.Automaton     (run)
+import           System.Random      (randomIO)
 
 testAutomaton :: Int -> IO (Automaton Char)
 testAutomaton n = compile <$> testString n

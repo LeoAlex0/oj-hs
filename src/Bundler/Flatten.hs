@@ -4,20 +4,22 @@ module Bundler.Flatten
   , renderCandidateModule
   ) where
 
-import Data.List (intercalate, sort)
+import           Data.List (intercalate, sort)
 
-data CandidateModule = CandidateModule
-  { candidateLanguagePragmas :: [String]
-  , candidateImports :: [String]
-  , candidateSegments :: [ModuleSegment]
-  , candidateEntryBinding :: String
-  }
+data CandidateModule
+  = CandidateModule
+      { candidateLanguagePragmas :: [String]
+      , candidateImports         :: [String]
+      , candidateSegments        :: [ModuleSegment]
+      , candidateEntryBinding    :: String
+      }
   deriving (Eq, Show)
 
-data ModuleSegment = ModuleSegment
-  { segmentName :: String
-  , segmentDeclarations :: [String]
-  }
+data ModuleSegment
+  = ModuleSegment
+      { segmentName         :: String
+      , segmentDeclarations :: [String]
+      }
   deriving (Eq, Show)
 
 renderCandidateModule :: CandidateModule -> String
