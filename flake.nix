@@ -50,6 +50,8 @@
             hlint
 
             pkgs.git
+            pkgs.gh
+            pkgs.jq
             pkgs.openspec
           ];
           # Change the prompt to show that you are in a devShell

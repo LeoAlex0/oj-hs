@@ -25,6 +25,12 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
+      - name: Cache Nix store
+        uses: DeterminateSystems/magic-nix-cache-action@v13
+        with:
+          diagnostic-endpoint: ""
+          use-flakehub: false
+
       - name: Show flake toolchain
         run: |
           nix develop --ignore-environment --command sh -c '

@@ -49,7 +49,7 @@ spec = describe "haskell-bundler integration" $ do
       firstSource `shouldSatisfy` ("{-# LANGUAGE PackageImports #-}" `isInfixOf`)
       firstSource `shouldSatisfy` ("import qualified \"ghc\" GHC.Core" `isInfixOf`)
       firstSource `shouldSatisfy` (not . ("bundler_internal_opaque_either :: Prelude.String" `isInfixOf`))
-      compileBundledSourceWithCabalExec outputDir "haskell-bundler.hs"
+      compileBundledSourceForExecutable outputDir "haskell-bundler.hs" "haskell-bundler"
       bundledBundler <-
         compileBundledExecutableForExecutable
           outputDir
@@ -91,18 +91,8 @@ compileBundledSourceWithPackages outputDir fileName packageNames = do
       packageArgs = concatMap (\packageName -> ["-package", packageName]) packageNames
   (exitCode, _stdout, stderr) <-
     readProcessWithExitCode "ghc" (["-fforce-recomp", "-fno-code", outputPath] ++ packageArgs) ""
-  exitCode `shouldBe` ExitSuccess
+  shouldExitSuccessfully ("ghc -fforce-recomp -fno-code " ++ outputPath) exitCode _stdout stderr
   stderr `shouldBe` ""
-
-compileBundledSourceWithCabalExec :: FilePath -> FilePath -> IO ()
-compileBundledSourceWithCabalExec outputDir fileName = do
-  let outputPath = outputDir </> fileName
-  (exitCode, _stdout, _stderr) <-
-    readProcessWithExitCode
-      "cabal"
-      ["exec", "ghc", "--", "--make", "-fforce-recomp", "-fno-code", outputPath]
-      ""
-  exitCode `shouldBe` ExitSuccess
 
 containsBundlerEnvironmentValue :: [FilePath] -> String -> Bool
 containsBundlerEnvironmentValue paths source =
@@ -121,9 +111,25 @@ compileBundledExecutableForExecutable outputDir fileName outputExecutableName so
       "ghc"
       (["-fforce-recomp", "-O0", sourcePath, "-o", executablePath] ++ packageArgs)
       ""
-  exitCode `shouldBe` ExitSuccess
+  shouldExitSuccessfully ("ghc -fforce-recomp -O0 " ++ sourcePath) exitCode _stdout stderr
   stderr `shouldBe` ""
   pure executablePath
+
+shouldExitSuccessfully :: String -> ExitCode -> String -> String -> IO ()
+shouldExitSuccessfully command exitCode stdout stderr =
+  case exitCode of
+    ExitSuccess -> pure ()
+    _ ->
+      expectationFailure
+        ( unlines
+            [ "command failed: " ++ command
+            , "exit code: " ++ show exitCode
+            , "stdout:"
+            , stdout
+            , "stderr:"
+            , stderr
+            ]
+        )
 
 bundledCompilePackageNames :: String -> IO [String]
 bundledCompilePackageNames executableName = do
