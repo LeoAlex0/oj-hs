@@ -8,9 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: read
   contents: read
-  issues: write
 
 jobs:
   benchmark:
@@ -20,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31
@@ -31,6 +31,7 @@ jobs:
         uses: DeterminateSystems/magic-nix-cache-action@v13
         with:
           diagnostic-endpoint: ""
+          use-gha-cache: true
           use-flakehub: false
 
       - name: Show flake toolchain
@@ -55,28 +56,3 @@ jobs:
             bench.html
             bench.json
           if-no-files-found: error
-
-      - name: Comment benchmark result on PR
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          CURRENT_REF: ${{ github.head_ref }}
-          GH_TOKEN: ${{ github.token }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          nix develop --ignore-environment --command env \
-            BASE_REF="$BASE_REF" \
-            BENCHMARK_BASE_DIR="artifacts/benchmark-base" \
-            BENCHMARK_CURRENT_JSON="bench.json" \
-            BENCHMARK_SUMMARY="benchmark-summary.md" \
-            CURRENT_REF="$CURRENT_REF" \
-            GH_TOKEN="$GH_TOKEN" \
-            GITHUB_REPOSITORY="${{ github.repository }}" \
-            GITHUB_RUN_ID="${{ github.run_id }}" \
-            GITHUB_SERVER_URL="${{ github.server_url }}" \
-            GITHUB_SHA="${{ github.sha }}" \
-            GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY" \
-            PR_HEAD_REPO="$PR_HEAD_REPO" \
-            PR_NUMBER="$PR_NUMBER" \
-            .github/scripts/benchmark-pr-comment.sh

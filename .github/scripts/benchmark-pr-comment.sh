@@ -116,6 +116,9 @@ short_sha="${sha:0:12}"
       }
 
       function md(s) {
+        gsub(/&/, "\\&amp;", s)
+        gsub(/</, "\\&lt;", s)
+        gsub(/>/, "\\&gt;", s)
         gsub(/\|/, "\\|", s)
         return s
       }
@@ -156,6 +159,9 @@ short_sha="${sha:0:12}"
       }
 
       function md(s) {
+        gsub(/&/, "\\&amp;", s)
+        gsub(/</, "\\&lt;", s)
+        gsub(/>/, "\\&gt;", s)
         gsub(/\|/, "\\|", s)
         return s
       }
