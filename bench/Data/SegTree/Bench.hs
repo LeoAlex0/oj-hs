@@ -1,17 +1,17 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedLists            #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 
 module Data.SegTree.Bench where
 
-import Control.DeepSeq (NFData)
-import Control.Monad (replicateM)
-import Criterion.Main
-import Data.Monoid
-import Data.SegTree
-import GHC.Generics (Generic)
-import qualified System.Random as R
+import           Control.DeepSeq (NFData)
+import           Control.Monad   (replicateM)
+import           Criterion.Main
+import           Data.Monoid
+import           Data.SegTree
+import           GHC.Generics    (Generic)
+import qualified System.Random   as R
 
 deriving instance (R.Random a) => R.Random (Sum a)
 
@@ -42,7 +42,7 @@ randomQuery tree = do
 randomApply :: TestTree -> IO TestTree
 randomApply tree = do
   [s1, s2] <- replicateM 2 $ R.randomRIO (0, size tree - 1)
-  apply <$> (Plus <$> R.randomIO) <*> pure (min s1 s2) <*> pure (max s1 s2) <*> pure tree
+  (apply . Plus <$> R.randomIO) <*> pure (min s1 s2) <*> pure (max s1 s2) <*> pure tree
 
 -- Our benchmark harness.
 benchST = env trees $ \ ~(tree_1e4, tree_1e5, tree_1e6) ->

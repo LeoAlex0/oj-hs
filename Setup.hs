@@ -1,7 +1,7 @@
-import Distribution.PackageDescription
-import Distribution.Simple
-import Distribution.Simple.LocalBuildInfo
-import Distribution.Simple.Setup
+import           Distribution.PackageDescription
+import           Distribution.Simple
+import           Distribution.Simple.LocalBuildInfo
+import           Distribution.Simple.Setup
 
 postHook :: Args -> BuildFlags -> PackageDescription -> LocalBuildInfo -> IO ()
 postHook args flags desc info = do

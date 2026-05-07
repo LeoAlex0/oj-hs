@@ -1,13 +1,13 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module Main (main) where
 
-import App.Import
-import App.Run
-import Options.Applicative.Simple
+import           App.Import
+import           App.Run
+import           Options.Applicative.Simple
 import qualified Paths_oj_hs
-import RIO.Process
+import           RIO.Process
 
 main :: IO ()
 main = do

@@ -1,4 +1,7 @@
 dist-newstyle
+dist-coverage/
+dist-benchmark/
+artifacts/
 .stack-work/
 *~
 

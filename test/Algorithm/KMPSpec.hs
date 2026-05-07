@@ -1,43 +1,28 @@
-{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module Algorithm.KMPSpec where
 
-import Algorithm.Text.KMP (compile, prefix)
-import Data.Automaton (Automaton (isAccept), run)
-import qualified Data.ByteString as BS (isSuffixOf, unpack)
-import Data.List as L (isSuffixOf)
-import Data.String (IsString (..))
-import Data.Vector as V
-  ( Vector,
-    fromList,
-    length,
-    null,
-    toList,
-    (!),
-  )
-import Test.HUnit ((@?=))
-import Test.Hspec (Spec, describe, it, shouldBe)
-import Test.Hspec.QuickCheck (prop)
-import Test.QuickCheck
-  ( ASCIIString (ASCIIString),
-    Arbitrary (arbitrary),
-    Args (maxSize),
-    NonNegative (NonNegative),
-    PrintableString (PrintableString),
-    choose,
-    disjoin,
-    expectFailure,
-    forAll,
-    getSize,
-    vector,
-    within,
-    (.&&.),
-    (===),
-    (==>),
-  )
-import Test.QuickCheck.Modifiers (Positive (Positive))
+import           Algorithm.Text.KMP        (compile, prefix)
+import           Data.Automaton            (Automaton (isAccept), run)
+import qualified Data.ByteString           as BS (isSuffixOf, unpack)
+import           Data.List                 as L (isSuffixOf)
+import           Data.String               (IsString (..))
+import           Data.Vector               as V (Vector, fromList, length, null,
+                                                 toList, (!))
+import           Test.Hspec                (Spec, describe, it, shouldBe)
+import           Test.Hspec.QuickCheck     (prop)
+import           Test.HUnit                ((@?=))
+import           Test.QuickCheck           (ASCIIString (ASCIIString),
+                                            Arbitrary (arbitrary),
+                                            Args (maxSize),
+                                            NonNegative (NonNegative),
+                                            PrintableString (PrintableString),
+                                            choose, disjoin, expectFailure,
+                                            forAll, getSize, vector, within,
+                                            (.&&.), (===), (==>))
+import           Test.QuickCheck.Modifiers (Positive (Positive))
 
 instance (Arbitrary a) => Arbitrary (V.Vector a) where
   arbitrary = V.fromList <$> arbitrary

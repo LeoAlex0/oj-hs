@@ -1,37 +1,37 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneDeriving    #-}
 
 module Data.EulerTourTree where
 
 import qualified Control.Applicative.Combinators as CAC
-import Control.Monad
-import qualified Control.Monad.State.Lazy as MS
-import qualified Data.FingerTree as FT
-import qualified Data.Foldable as F
-import qualified Data.List as L
-import qualified Data.Maybe as MB
-import qualified Data.Monoid as M
-import qualified Data.Set as S
-import qualified Data.Tree as T
+import           Control.Monad
+import qualified Control.Monad.State.Lazy        as MS
+import qualified Data.FingerTree                 as FT
+import qualified Data.Foldable                   as F
+import qualified Data.List                       as L
+import qualified Data.Maybe                      as MB
+import qualified Data.Monoid                     as M
+import qualified Data.Set                        as S
+import qualified Data.Tree                       as T
 
 searchM :: (MonadPlus m) => (FT.Measured v a) => (v -> v -> Bool) -> FT.FingerTree v a -> m (FT.FingerTree v a, a, FT.FingerTree v a)
 searchM f tree = case FT.search f tree of
   FT.Position pr a sf -> pure (pr, a, sf)
-  _ -> mzero
+  _                   -> mzero
 
 initSafe :: (FT.Measured v a) => FT.FingerTree v a -> FT.FingerTree v a
 initSafe tree = case FT.viewr tree of
   init FT.:> _ -> init
-  _ -> tree
+  _            -> tree
 
 tailSafe :: (FT.Measured v a) => FT.FingerTree v a -> FT.FingerTree v a
 tailSafe tree = case FT.viewl tree of
   _ FT.:< tail -> tail
-  _ -> tree
+  _            -> tree
 
 newtype EulerTourNode node
   = EulerTourNode node
@@ -132,7 +132,7 @@ toTree (EulerTourTree fingerTree) = MS.evalStateT parser fingerTree
       tree <- MS.get
       case FT.viewl tree of
         node FT.:< tree' -> MS.put tree' >> pure node
-        _ -> mzero
+        _                -> mzero
     token x = do
       t <- anyToken
       guard (t == x)

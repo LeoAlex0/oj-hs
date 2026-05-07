@@ -1,17 +1,17 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedLists            #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 
 module Data.FingerTree.Bench where
 
-import Control.DeepSeq (NFData)
-import Control.Monad (replicateM)
-import Criterion.Main
-import Data.FingerTree
-import Data.FingerTree.Measure
-import GHC.Generics (Generic)
-import qualified System.Random as R
+import           Control.DeepSeq         (NFData)
+import           Control.Monad           (replicateM)
+import           Criterion.Main
+import           Data.FingerTree
+import           Data.FingerTree.Measure
+import           GHC.Generics            (Generic)
+import qualified System.Random           as R
 
 deriving instance (R.Random a) => R.Random (Value a)
 

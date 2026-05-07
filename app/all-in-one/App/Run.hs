@@ -1,10 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module App.Run (run) where
 
-import App.Import
-import qualified Hpack as H
+import           App.Import
+import qualified Hpack      as H
 
 -- >>> H.getOptions "." []
 --
@@ -15,5 +15,5 @@ run = do
   hpackOpt <- liftIO $ H.getOptions "." []
   case hpackOpt of
     Just (v, o) -> logInfo ("hpack verbose" <> displayShow v)
-    Nothing -> pure ()
+    Nothing     -> pure ()
   pure ()
