@@ -200,6 +200,7 @@ comment_id="$(
   gh api "repos/${repo}/issues/${pr_number}/comments" \
     --paginate \
     --jq ".[] | select(.body | contains(\"$marker\")) | .id" 2>/dev/null \
+    | grep -E '^[0-9]+$' \
     | tail -n 1 || true
 )"
 
