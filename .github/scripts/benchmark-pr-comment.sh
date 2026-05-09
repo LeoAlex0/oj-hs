@@ -21,136 +21,20 @@ run_url="${server_url}/${repo}/actions/runs/${run_id}"
 current_tsv="$(mktemp)"
 base_tsv="$(mktemp)"
 body_file="$(mktemp)"
-comments_json="$(mktemp)"
-api_response="$(mktemp)"
+comment_ids="$(mktemp)"
 api_error="$(mktemp)"
 cleanup() {
-  rm -f "$current_tsv" "$base_tsv" "$body_file" "$comments_json" "$api_response" "$api_error"
+  rm -f "$current_tsv" "$base_tsv" "$body_file" "$comment_ids" "$api_error"
 }
 trap cleanup EXIT
 
-print_comment_context() {
-  echo "Benchmark comment context:" >&2
-  echo "  repository: ${repo:-<empty>}" >&2
-  echo "  pull_request: ${pr_number:-<empty>}" >&2
-  echo "  pull_request_head_repository: ${pr_head_repo:-<empty>}" >&2
-  echo "  current_ref: ${current_ref:-<empty>}" >&2
-  echo "  base_ref: ${base_ref:-<empty>}" >&2
-  echo "  benchmark_run_id: ${run_id:-<empty>}" >&2
-}
-
-print_github_api_response_body() {
-  local response_file="$1"
-  local body
-  local status_code
-
-  status_code="$(
-    awk '
-      {
-        line = $0
-        sub(/\r$/, "", line)
-        if (line ~ /^HTTP\//) {
-          code = $2
-        }
-      }
-      END {
-        print code
-      }
-    ' "$response_file"
-  )"
-
-  if [ -n "$status_code" ] && [ "$status_code" -lt 400 ]; then
-    return
-  fi
-
-  body="$(
-    awk '
-      {
-        line = $0
-        sub(/\r$/, "", line)
-        if (body) {
-          print line
-        }
-        if (line == "") {
-          body = 1
-        }
-      }
-    ' "$response_file"
-  )"
-
-  if [ -z "$body" ]; then
-    return
-  fi
-
-  echo "GitHub API response body:" >&2
-  if printf '%s\n' "$body" | jq -e . >/dev/null 2>&1; then
-    printf '%s\n' "$body" | jq -r '
-      "  message: \(.message // "n/a")",
-      "  status: \(.status // "n/a")",
-      "  documentation_url: \(.documentation_url // "n/a")"
-    ' >&2
-  else
-    printf '%s\n' "$body" | sed 's/^/  /' >&2
-  fi
-}
-
-print_github_api_failure() {
+log_comment_api_failure() {
   local context="$1"
-  local response_file="$2"
-  local error_file="$3"
+  local error_file="$2"
 
   echo "GitHub API request failed while $context." >&2
-  print_comment_context
-
-  if [ -s "$response_file" ]; then
-    echo "GitHub API response headers:" >&2
-    awk '
-      {
-        line = $0
-        sub(/\r$/, "", line)
-        lower = tolower(line)
-        if (line ~ /^HTTP\// ||
-            lower ~ /^x-accepted-github-permissions:/ ||
-            lower ~ /^x-github-request-id:/ ||
-            lower ~ /^x-ratelimit-limit:/ ||
-            lower ~ /^x-ratelimit-remaining:/ ||
-            lower ~ /^x-ratelimit-resource:/ ||
-            lower ~ /^x-ratelimit-reset:/) {
-          print "  " line
-        }
-      }
-    ' "$response_file" >&2
-    print_github_api_response_body "$response_file"
-  fi
-
-  if [ -s "$error_file" ]; then
-    echo "GitHub CLI stderr:" >&2
-    sed 's/^/  /' "$error_file" >&2
-  fi
-}
-
-diagnose_github_api_failure() {
-  local context="$1"
-  shift
-
-  : > "$api_response"
-  : > "$api_error"
-  gh api --include "$@" > "$api_response" 2> "$api_error" || true
-  print_github_api_failure "$context" "$api_response" "$api_error"
-}
-
-gh_api_write() {
-  local context="$1"
-  shift
-
-  : > "$api_response"
-  : > "$api_error"
-  if gh api --include "$@" > "$api_response" 2> "$api_error"; then
-    return 0
-  fi
-
-  print_github_api_failure "$context" "$api_response" "$api_error"
-  return 1
+  echo "Context: repo=${repo:-<empty>} pr=${pr_number:-<empty>} head_repo=${pr_head_repo:-<empty>} current_ref=${current_ref:-<empty>} base_ref=${base_ref:-<empty>} run=${run_id:-<empty>}" >&2
+  sed 's/^/  /' "$error_file" >&2
 }
 
 if [ ! -s "$current_json" ]; then
@@ -324,34 +208,36 @@ fi
 } > "$body_file"
 
 : > "$api_error"
-if gh api "repos/${repo}/issues/${pr_number}/comments" --paginate > "$comments_json" 2> "$api_error"; then
-  comment_id="$(
-    jq -r --arg marker "$marker" '.[] | select((.body // "") | contains($marker)) | .id' "$comments_json" \
-      | grep -E '^[0-9]+$' \
-      | tail -n 1 || true
-  )"
+if gh api "repos/${repo}/issues/${pr_number}/comments" \
+  --paginate \
+  --jq ".[] | select(.body | contains(\"$marker\")) | .id" > "$comment_ids" 2> "$api_error"; then
+  comment_id="$(grep -E '^[0-9]+$' "$comment_ids" | tail -n 1 || true)"
 else
-  diagnose_github_api_failure "listing benchmark PR comments" "repos/${repo}/issues/${pr_number}/comments"
+  log_comment_api_failure "listing benchmark PR comments" "$api_error"
   echo "Failed to list benchmark PR comments; skipping comment update to avoid duplicate comments." >&2
   exit 0
 fi
 
 if [ -n "$comment_id" ]; then
-  if gh_api_write "updating benchmark PR comment #$comment_id" \
+  : > "$api_error"
+  if gh api \
     --method PATCH \
     "repos/${repo}/issues/comments/${comment_id}" \
-    -f body="$(cat "$body_file")"; then
+    -f body="$(cat "$body_file")" >/dev/null 2> "$api_error"; then
     echo "Updated benchmark PR comment #$comment_id."
   else
+    log_comment_api_failure "updating benchmark PR comment #$comment_id" "$api_error"
     echo "Failed to update benchmark PR comment; keeping benchmark job successful." >&2
   fi
 else
-  if gh_api_write "creating benchmark PR comment on #$pr_number" \
+  : > "$api_error"
+  if gh api \
     --method POST \
     "repos/${repo}/issues/${pr_number}/comments" \
-    -f body="$(cat "$body_file")"; then
+    -f body="$(cat "$body_file")" >/dev/null 2> "$api_error"; then
     echo "Created benchmark PR comment."
   else
+    log_comment_api_failure "creating benchmark PR comment on #$pr_number" "$api_error"
     echo "Failed to create benchmark PR comment; keeping benchmark job successful." >&2
   fi
 fi
