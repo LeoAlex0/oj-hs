@@ -2,6 +2,8 @@ dist-newstyle
 dist-coverage/
 dist-benchmark/
 artifacts/
+bench.html
+bench.json
 .stack-work/
 *~
 

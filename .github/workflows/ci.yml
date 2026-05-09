@@ -28,15 +28,15 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Cache Nix store
-        uses: DeterminateSystems/magic-nix-cache-action@v13
+        uses: nix-community/cache-nix-action@v7
         with:
-          diagnostic-endpoint: ""
-          use-gha-cache: true
-          use-flakehub: false
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix', 'oj-hs.cabal') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size-linux: 5G
 
       - name: Show flake toolchain
         run: |
-          nix develop --ignore-environment --command sh -c '
+          nix develop --ignore-environment .#ci --command sh -c '
             ghc --version
             cabal --version
             stylish-haskell --version
@@ -44,11 +44,11 @@ jobs:
           '
 
       - name: Update Cabal package index
-        run: nix develop --ignore-environment --command cabal update
+        run: nix develop --ignore-environment .#ci --command cabal update
 
       - name: Check Haskell formatting
         run: |
-          nix develop --ignore-environment --command bash -s <<'EOF'
+          nix develop --ignore-environment .#ci --command bash -s <<'EOF'
           set -euo pipefail
 
           failed=0
@@ -66,7 +66,7 @@ jobs:
 
       - name: Run HLint
         run: |
-          nix develop --ignore-environment --command bash -s <<'EOF'
+          nix develop --ignore-environment .#ci --command bash -s <<'EOF'
           set -euo pipefail
 
           mapfile -t files < <(git ls-files "*.hs")
@@ -74,7 +74,7 @@ jobs:
           EOF
 
       - name: Build all targets
-        run: nix develop --ignore-environment --command cabal build all
+        run: nix develop --ignore-environment .#ci --command cabal build all
 
       - name: Run unit tests
-        run: nix develop --ignore-environment --command cabal test all --test-show-details=direct
+        run: nix develop --ignore-environment .#ci --command cabal test all --test-show-details=direct

@@ -33,30 +33,53 @@
       });
       defaultPackage = forAllSystems (system: self.packages.${system}.oj-hs);
       checks = self.packages;
-      devShell = forAllSystems (
+      devShells = forAllSystems (
         system:
         let
           haskellPackages = nixpkgsFor.${system}.haskellPackages;
           pkgs = nixpkgsFor.${system};
         in
-        haskellPackages.shellFor {
-          packages = p: [ self.packages.${system}.oj-hs ];
-          withHoogle = true;
-          buildInputs = with haskellPackages; [
-            haskell-language-server
-            ghcid
-            cabal-install
-            stylish-haskell
-            hlint
+        {
+          default = haskellPackages.shellFor {
+            packages = p: [ self.packages.${system}.oj-hs ];
+            withHoogle = true;
+            buildInputs = with haskellPackages; [
+              haskell-language-server
+              ghcid
+              cabal-install
+              stylish-haskell
+              hlint
 
-            pkgs.git
-            pkgs.gh
-            pkgs.jq
-            pkgs.openspec
-          ];
-          # Change the prompt to show that you are in a devShell
-          shellHook = "export PS1='\\e[1;34mdev > \\e[0m'";
+              pkgs.git
+              pkgs.gh
+              pkgs.jq
+              pkgs.openspec
+            ];
+            # Change the prompt to show that you are in a devShell
+            shellHook = "export PS1='\\e[1;34mdev > \\e[0m'";
+          };
+          ci = haskellPackages.shellFor {
+            packages = p: [ self.packages.${system}.oj-hs ];
+            withHoogle = false;
+            buildInputs = with haskellPackages; [
+              cabal-install
+              stylish-haskell
+              hlint
+
+              pkgs.git
+            ];
+          };
+          ci-tools = pkgs.mkShell {
+            packages = [
+              pkgs.bash
+              pkgs.coreutils
+              pkgs.gawk
+              pkgs.gh
+              pkgs.jq
+            ];
+          };
         }
       );
+      devShell = forAllSystems (system: self.devShells.${system}.default);
     };
 }
