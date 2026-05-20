@@ -17,6 +17,7 @@ license-file:   LICENSE
 build-type:     Custom
 extra-source-files:
     README.md
+    app/bundler/README.md
     ChangeLog.md
 
 source-repository head
@@ -84,48 +85,6 @@ library
     , vector
   default-language: Haskell2010
 
-executable all-in-one
-  main-is: Main.hs
-  other-modules:
-      App.Import
-      App.Run
-      App.Types
-      App.Util
-      Paths_oj_hs
-  autogen-modules:
-      Paths_oj_hs
-  hs-source-dirs:
-      app/all-in-one
-  default-extensions:
-      NoImplicitPrelude
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
-  build-depends:
-      Cabal ==3.*
-    , array
-    , base >=4.11 && <10
-    , bytestring
-    , containers
-    , deepseq
-    , directory
-    , filepath
-    , ghc
-    , ghc-lib-parser
-    , hashable
-    , hpack
-    , lens
-    , mtl
-    , optparse-applicative
-    , optparse-simple
-    , parsec
-    , parser-combinators
-    , process
-    , rio >=0.1.12.0
-    , text
-    , time
-    , unordered-containers
-    , vector
-  default-language: Haskell2010
-
 executable codeforces-wip
   main-is: Main.hs
   other-modules:
@@ -185,7 +144,7 @@ executable custom-setup
     , vector
   default-language: Haskell2010
 
-executable haskell-bundler
+executable bundler
   main-is: Main.hs
   other-modules:
       Paths_oj_hs

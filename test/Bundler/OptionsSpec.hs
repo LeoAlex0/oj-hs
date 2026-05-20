@@ -10,11 +10,11 @@ spec :: Spec
 spec = describe "Bundler.Options" $ do
   it "parses executable and output options" $ do
     parseOptions ["--exec", "luogu-wip", "--output", "out.hs"]
-      `shouldBe` Right (BundleOptions (Just "luogu-wip") "out.hs" ".")
+      `shouldBe` Right (BundleOptions (Just "luogu-wip") (Just "out.hs") ".")
 
-  it "uses bundled.hs as the default output" $ do
+  it "uses stdout as the default output" $ do
     parseOptions []
-      `shouldBe` Right (BundleOptions Nothing "bundled.hs" ".")
+      `shouldBe` Right (BundleOptions Nothing Nothing ".")
 
   it "rejects unknown options through optparse-applicative" $ do
     parseOptions ["--does-not-exist"] `shouldSatisfy` isParseFailure

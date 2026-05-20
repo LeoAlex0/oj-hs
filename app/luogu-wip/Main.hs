@@ -2,4 +2,4 @@
 
 module Main (P.main) where
 
-import           Solution.Luogu.P3156 as P (main)
+import           Solution.Luogu.P1383 as P (main)

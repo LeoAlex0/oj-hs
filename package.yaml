@@ -8,6 +8,7 @@ copyright: "zLeoAlex"
 
 extra-source-files:
   - README.md
+  - app/bundler/README.md
   - ChangeLog.md
 
 # Metadata used when publishing your package
@@ -57,26 +58,6 @@ executables:
     source-dirs: []
     dependencies: *setup-deps
 
-  all-in-one:
-    main: Main.hs
-    source-dirs: app/all-in-one
-    ghc-options:
-      - -Wall
-      - -Wcompat
-      - -Widentities
-      - -Wincomplete-record-updates
-      - -Wincomplete-uni-patterns
-      - -Wpartial-fields
-      - -Wredundant-constraints
-    dependencies:
-      - base >= 4.11 && < 10
-      - rio >= 0.1.12.0
-      - lens
-      - optparse-simple
-      - hpack
-      - ghc-lib-parser
-    default-extensions:
-      - NoImplicitPrelude
   luogu-wip:
     main: Main.hs
     source-dirs: app/luogu-wip
@@ -87,7 +68,7 @@ executables:
     source-dirs: app/codeforces-wip
     dependencies:
       - oj-hs
-  haskell-bundler:
+  bundler:
     main: Main.hs
     source-dirs: app/bundler
     dependencies:

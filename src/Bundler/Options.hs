@@ -12,7 +12,7 @@ import           Options.Applicative (Parser, ParserInfo, execParser, fullDesc,
 data BundleOptions
   = BundleOptions
       { optExecutable :: Maybe String
-      , optOutput     :: FilePath
+      , optOutput     :: Maybe FilePath
       , optPackageDir :: FilePath
       }
   deriving (Eq, Show)
@@ -26,7 +26,7 @@ bundleOptionsInfo =
     (bundleOptionsParser <**> helper)
     ( fullDesc
         <> progDesc "Bundle a package executable and its reachable internal modules into one Haskell source file."
-        <> header "haskell-bundler"
+        <> header "bundler"
     )
 
 bundleOptionsParser :: Parser BundleOptions
@@ -39,13 +39,13 @@ bundleOptionsParser =
               <> help "Package executable to bundle. Defaults to the first executable stanza."
           )
       )
-    <*> strOption
-      ( long "output"
-          <> short 'o'
-          <> metavar "PATH"
-          <> value "bundled.hs"
-          <> showDefault
-          <> help "Path for the generated single-file Haskell source."
+    <*> optional
+      ( strOption
+          ( long "output"
+              <> short 'o'
+              <> metavar "PATH"
+              <> help "Path for the generated source. Defaults to stdout."
+          )
       )
     <*> strOption
       ( long "package-dir"

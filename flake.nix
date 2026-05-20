@@ -49,11 +49,11 @@
               cabal-install
               stylish-haskell
               hlint
+              hpack
 
               pkgs.git
               pkgs.gh
               pkgs.jq
-              pkgs.openspec
             ];
             # Change the prompt to show that you are in a devShell
             shellHook = "export PS1='\\e[1;34mdev > \\e[0m'";
