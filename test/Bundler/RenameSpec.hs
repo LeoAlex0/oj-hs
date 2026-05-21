@@ -1,15 +1,18 @@
 module Bundler.RenameSpec where
 
-import           Bundler.Rename   (NameTransform (transformGeneratedIdentifier, transformOriginalModule),
+import           Bundler.Rename   (NameStyle (CompactNames),
+                                   NameTransform (transformGeneratedIdentifier, transformOriginalModule),
                                    detectNameTransformConflict,
-                                   generatedIdentifier)
+                                   generatedIdentifier,
+                                   generatedIdentifierWithStyle)
 import           Data.Char        (isLower, isUpper)
 import           Data.Maybe       (isJust)
 import           System.Directory (getTemporaryDirectory, removeFile)
 import           System.Exit      (ExitCode (ExitSuccess))
 import           System.IO        (hClose, hPutStr, openTempFile)
 import           System.Process   (readProcessWithExitCode)
-import           Test.Hspec       (Spec, describe, it, shouldBe, shouldSatisfy)
+import           Test.Hspec       (Spec, describe, it, shouldBe, shouldNotBe,
+                                   shouldSatisfy)
 
 spec :: Spec
 spec = describe "Bundler.Rename" $ do
@@ -17,8 +20,16 @@ spec = describe "Bundler.Rename" $ do
     it "generates varid names for lowercase identifiers" $ do
       generated "Data.Text" "value" `shouldSatisfy` startsWith isLower
 
-    it "uses the module-derived prefix for identifiers" $ do
-      generated "Data.Text" "value" `shouldBe` "data_u46_Text_value"
+    it "keeps module and occurrence names readable by default" $ do
+      generated "Data.Text" "value" `shouldBe` "v_Data_46_Text_value"
+
+    it "uses stable compact identifiers on request" $ do
+      let valueName = generated "Data.Text" "value"
+          compactValueName = generatedCompact "Data.Text" "value"
+      generatedCompact "Data.Text" "value" `shouldBe` compactValueName
+      generatedCompact "Other.Module" "value" `shouldNotBe` compactValueName
+      compactValueName `shouldSatisfy` ((< 16) . length)
+      compactValueName `shouldNotBe` valueName
 
     it "generates conid names for uppercase identifiers" $ do
       generated "Data.Text" "Value" `shouldSatisfy` startsWith isUpper
@@ -54,6 +65,10 @@ spec = describe "Bundler.Rename" $ do
 generated :: String -> String -> String
 generated moduleName occurrenceName =
   transformGeneratedIdentifier (generatedIdentifier moduleName occurrenceName)
+
+generatedCompact :: String -> String -> String
+generatedCompact moduleName occurrenceName =
+  transformGeneratedIdentifier (generatedIdentifierWithStyle CompactNames moduleName occurrenceName)
 
 startsWith :: (Char -> Bool) -> String -> Bool
 startsWith predicate (first : _) = predicate first

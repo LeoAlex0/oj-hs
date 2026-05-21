@@ -27,15 +27,14 @@ import           GHC.Core                  (CoreProgram, flattenBinds)
 import           GHC.Core.FVs              (exprFreeIdsList)
 import           GHC.Data.Graph.Directed   (topologicalSortG)
 import           GHC.Data.StringBuffer     (stringToStringBuffer)
-import           GHC.Driver.Main           (hscSimplify)
-import           GHC.Driver.Monad          (getSession, pushLogHookM)
+import           GHC.Driver.Monad          (pushLogHookM)
 import           GHC.Driver.Session        (homeUnitId_)
 import           GHC.Types.Error           (mkLocMessage)
-import           GHC.Types.Name            (nameOccName)
+import           GHC.Types.Name            (Name, nameOccName)
 import           GHC.Types.Name.Occurrence (occNameString)
 import           GHC.Types.SrcLoc          (noLoc)
 import           GHC.Types.Target          (Target (..), TargetId (TargetFile))
-import           GHC.Types.Var             (Var, varName)
+import           GHC.Types.Var             (varName)
 import           GHC.Unit.Module.Graph     (ModuleGraph, mgModSummaries',
                                             moduleGraphNodeModSum,
                                             moduleGraphNodes,
@@ -94,9 +93,7 @@ analyzeCoreLiveSetInSession ghcArguments candidateSource = do
               parsed <- parseModule summary
               typechecked <- typecheckModule parsed
               desugared <- desugarModule typechecked
-              hscEnv <- getSession
-              simplified <- liftIO (hscSimplify hscEnv [] (coreModule desugared))
-              pure (Right (coreLiveSetFromBinds (mg_binds simplified)))
+              pure (Right (coreLiveSetFromBinds (mg_binds (coreModule desugared))))
 
 captureDiagnostics :: IORef [String] -> LogAction -> LogAction
 captureDiagnostics diagnosticsRef _originalLogAction flags messageClass sourceSpan message = do
@@ -139,44 +136,40 @@ coreLiveSetFromBinds :: CoreProgram -> CoreLiveSet
 coreLiveSetFromBinds binds =
   CoreLiveSet
     { liveGeneratedIdentifiers =
-        reachableIdentifiers dependencyMap seedIdentifiers
+        Set.map identifierFromName (reachableNames dependencyMap seedNames)
     }
   where
     flattenedBindings = flattenBinds binds
-    bindingIdentifiers =
-      Map.fromList
-        [ (identifierFromVar binder, expression)
+    dependencyMap =
+      Map.fromListWith
+        Set.union
+        [ ( varName binder
+          , Set.fromList (map varName (exprFreeIdsList expression))
+          )
         | (binder, expression) <- flattenedBindings
         ]
-    localIdentifiers = Map.keysSet bindingIdentifiers
-    dependencyMap =
-      Map.map
-        ( Set.fromList
-            . filter (`Set.member` localIdentifiers)
-            . map identifierFromVar
-            . exprFreeIdsList
-        )
-        bindingIdentifiers
-    seedIdentifiers =
-      if Map.member "main" dependencyMap
-        then Set.singleton "main"
-        else localIdentifiers
+    mainNames =
+      Set.filter ((== "main") . identifierFromName) (Map.keysSet dependencyMap)
+    seedNames =
+      if Set.null mainNames
+        then Map.keysSet dependencyMap
+        else mainNames
 
-identifierFromVar :: Var -> String
-identifierFromVar binder =
-  occNameString (nameOccName (varName binder))
+identifierFromName :: Name -> String
+identifierFromName name =
+  occNameString (nameOccName name)
 
-reachableIdentifiers :: Map.Map String (Set.Set String) -> Set.Set String -> Set.Set String
-reachableIdentifiers dependencyMap =
+reachableNames :: Map.Map Name (Set.Set Name) -> Set.Set Name -> Set.Set Name
+reachableNames dependencyMap =
   go Set.empty . Set.toList
   where
     go reached [] = reached
-    go reached (identifier : pending)
-      | Set.member identifier reached = go reached pending
+    go reached (name : pending)
+      | Set.member name reached = go reached pending
       | otherwise =
           let dependencies =
-                Set.toList (Map.findWithDefault Set.empty identifier dependencyMap)
-           in go (Set.insert identifier reached) (dependencies ++ pending)
+                Set.toList (Map.findWithDefault Set.empty name dependencyMap)
+           in go (Set.insert name reached) (dependencies ++ pending)
 
 pruneByCoreLiveSet :: CoreLiveSet -> [(String, a)] -> [(String, a)]
 pruneByCoreLiveSet liveSet =

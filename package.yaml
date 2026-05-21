@@ -20,11 +20,6 @@ extra-source-files:
 # common to point users to the README.md file.
 description: Please see the README on GitHub at <https://github.com/LeoAlex0/oj-hs#readme>
 
-custom-setup:
-  dependencies: &setup-deps
-    - base >= 4.7 && < 5
-    - Cabal >=3 && < 4
-
 dependencies:
   - base >= 4.7 && < 5
   - Cabal >=3 && < 4
@@ -53,11 +48,6 @@ library:
     - -O2
 
 executables:
-  custom-setup:
-    main: ./Setup.hs
-    source-dirs: []
-    dependencies: *setup-deps
-
   luogu-wip:
     main: Main.hs
     source-dirs: app/luogu-wip
@@ -78,6 +68,8 @@ tests:
   oj-hs-test:
     main: Spec.hs
     source-dirs: test
+    build-tools:
+      - hspec-discover
     ghc-options:
       - -threaded
       - -rtsopts
@@ -94,10 +86,13 @@ benchmarks:
   benchmark-prac-haskell-bench:
     source-dirs: bench
     main: BenchMain.hs
+    build-tools:
+      - tasty-discover
     ghc-options:
       - -O2
     dependencies:
       - oj-hs
-      - criterion
+      - tasty
+      - tasty-bench
       - random
       - deepseq

@@ -8,3 +8,5 @@ bench.json
 *~
 
 .direnv
+
+Out.hs

@@ -50,6 +50,7 @@
               stylish-haskell
               hlint
               hpack
+              tasty-discover
 
               pkgs.git
               pkgs.gh

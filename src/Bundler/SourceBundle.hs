@@ -9,8 +9,9 @@ import           Bundler.DCE               (CoreLiveSet (..),
 import           Bundler.Error             (BundleError (GhcLoadFailed, SourceBundleFailed, SymbolConflict))
 import           Bundler.GHC               (LoadedGhcModules (..),
                                             LoadedModule (..))
-import           Bundler.Rename            (NameTransform,
-                                            generatedIdentifierFromName,
+import           Bundler.Rename            (NameStyle,
+                                            NameTransform,
+                                            generatedIdentifierFromNameWithStyle,
                                             transformGeneratedIdentifier,
                                             transformOriginalModule,
                                             transformOriginalOccurrence)
@@ -21,9 +22,10 @@ import           Bundler.Transform         (ExternalImport (..),
                                             renderRenamedDeclarations)
 import           Data.Char                 (isAsciiLower, isAsciiUpper, isDigit,
                                             isSpace)
-import           Data.List                 (isInfixOf, isPrefixOf, isSuffixOf,
-                                            nub, sort, stripPrefix)
-import           Data.Maybe                (fromMaybe, maybeToList)
+import           Data.List                 (intercalate, isInfixOf, isPrefixOf,
+                                            isSuffixOf, nub, sort, stripPrefix)
+import           Data.Maybe                (fromMaybe, listToMaybe,
+                                            maybeToList)
 import qualified Data.Set                  as Set
 import           GHC.Types.Name            (Name, nameOccName)
 import           GHC.Types.Name.Occurrence (NameSpace, occNameSpace,
@@ -61,25 +63,26 @@ data DeclarationMapping
   deriving (Eq, Ord, Show)
 
 generateSourceBundle ::
+  NameStyle ->
   PackageInfo ->
   ExecutableInfo ->
   LoadedGhcModules ->
   IO (Either BundleError String)
-generateSourceBundle packageInfo executableInfo loaded = do
+generateSourceBundle nameStyle packageInfo executableInfo loaded = do
   let internalModules = filter loadedModuleIsInternal (loadedModules loaded)
       internalNames = map loadedModuleName internalModules
       internalGlobalRdrEnvs = loadedInternalGlobalRdrEnvs internalModules
       unitPackageNames = loadedUnitPackageNames loaded
       emittedModules = filter shouldEmitModule internalModules
-      allDeclarationMappings = concatMap (buildDeclarationMappings internalNames) emittedModules
-  case findGeneratedNameConflict internalNames emittedModules of
+      allDeclarationMappings = concatMap (buildDeclarationMappings nameStyle internalNames) emittedModules
+  case findGeneratedNameConflict nameStyle internalNames emittedModules of
     Just (left, right) -> pure (Left (SymbolConflict left right))
     Nothing -> do
-      parsedModules <- traverse (readSourceModule internalNames internalGlobalRdrEnvs allDeclarationMappings) emittedModules
+      parsedModules <- traverse (readSourceModule nameStyle internalNames internalGlobalRdrEnvs allDeclarationMappings) emittedModules
       case sequence parsedModules of
         Left message -> pure (Left (SourceBundleFailed message))
         Right sourceModules ->
-          case findEntryBinding internalNames executableInfo emittedModules of
+          case findEntryBinding nameStyle internalNames executableInfo emittedModules of
             Left message -> pure (Left (SourceBundleFailed message))
             Right entryBinding ->
               let externalImports =
@@ -119,8 +122,10 @@ analyzeAndRenderBundle packageInfo loaded executableInfo externalImports entryBi
   case liveSetResult of
     Left err -> pure (Left err)
     Right liveSet ->
-      let prunedModules = pruneSourceModules liveSet entryBinding sourceModules
-          prunedSource = renderBundleSource packageInfo executableInfo externalImports entryBinding prunedModules
+      let prunedModules =
+            compactSourceModules liveSet (pruneSourceModules liveSet entryBinding sourceModules)
+          prunedSource =
+            renderBundleSource packageInfo executableInfo externalImports entryBinding prunedModules
        in pure (Right prunedSource)
 
 shouldRepairOpaqueEitherConstructors :: BundleError -> Bool
@@ -140,8 +145,8 @@ loadedInternalGlobalRdrEnvs loadedModules =
   , globalRdrEnv <- maybeToList (loadedGlobalRdrEnv loadedModule)
   ]
 
-readSourceModule :: [String] -> [(String, GlobalRdrEnv)] -> [DeclarationMapping] -> LoadedModule -> IO (Either String SourceModule)
-readSourceModule internalModuleNames internalGlobalRdrEnvs allDeclarationMappings loadedModule =
+readSourceModule :: NameStyle -> [String] -> [(String, GlobalRdrEnv)] -> [DeclarationMapping] -> LoadedModule -> IO (Either String SourceModule)
+readSourceModule nameStyle internalModuleNames internalGlobalRdrEnvs allDeclarationMappings loadedModule =
   case (loadedModuleFile loadedModule, loadedModuleSource loadedModule, loadedRenamedSource loadedModule) of
     (Nothing, _, _) ->
       pure (Left ("Internal module has no source file: " ++ loadedModuleName loadedModule))
@@ -154,7 +159,7 @@ readSourceModule internalModuleNames internalGlobalRdrEnvs allDeclarationMapping
           pragmas = filter isPragmaLine sourceLines
           renderedDeclarations =
             trimBlankEdges
-              (renderRenamedDeclarations internalModuleNames internalGlobalRdrEnvs (loadedGlobalRdrEnv loadedModule) renamedSource)
+              (renderRenamedDeclarations nameStyle internalModuleNames internalGlobalRdrEnvs (loadedGlobalRdrEnv loadedModule) renamedSource)
           declarationMappings =
             [ mapping
             | mapping <- allDeclarationMappings
@@ -188,43 +193,71 @@ renderBundleSource :: PackageInfo -> ExecutableInfo -> [ExternalImport] -> Strin
 renderBundleSource packageInfo executableInfo externalImports entryBinding sourceModules =
   unlines $
     let retainedPragmas =
-          uniqueSorted
+          normalizePragmas
             ( concatMap sourceModulePragmas sourceModules
                 ++ map renderLanguagePragma (bundleDefaultExtensions packageInfo executableInfo)
                 ++ ["{-# LANGUAGE PackageImports #-}" | any usesPackageImport externalImports]
+                ++ [ "{-# OPTIONS_GHC -Wno-unused-imports #-}"
+                   , "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"
+                   ]
             )
      in retainedPragmas
-      ++ semanticSensitivePragmaNotes retainedPragmas
-      ++ syntheticPathsModuleNotes packageInfo sourceModules
-      ++ [ "{-# OPTIONS_GHC -Wno-unused-imports #-}"
-         , "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"
-         , "module Main (main) where"
-         , ""
+      ++ [ "module Main (main) where"
          ]
       ++ map renderQualifiedImport externalImports
-      ++ [""]
       ++ renderOpaqueEitherHelper sourceModules
       ++ concatMap renderSourceModule sourceModules
       ++ [ "main :: Prelude.IO ()"
          , "main = " ++ entryBinding
-         , ""
-         , "-- bundled executable: " ++ executableName executableInfo
          ]
 
 renderSourceModule :: SourceModule -> [String]
 renderSourceModule sourceModule =
-  [ "-- source: " ++ sourceModuleName sourceModule
-  ]
-    ++ concatMap renderDeclarationGroup (sourceModuleDeclarationGroups sourceModule)
-    ++ [""]
+  concatMap renderDeclarationGroup (sourceModuleDeclarationGroups sourceModule)
 
 renderDeclarationGroup :: DeclarationGroup -> [String]
 renderDeclarationGroup group =
-  declarationGroupLines group ++ [""]
+  declarationGroupLines group
 
 renderLanguagePragma :: String -> String
 renderLanguagePragma extension =
   "{-# LANGUAGE " ++ extension ++ " #-}"
+
+normalizePragmas :: [String] -> [String]
+normalizePragmas =
+  uniqueSorted . concatMap normalizePragma
+
+normalizePragma :: String -> [String]
+normalizePragma line
+  | Just extensions <- parsePragmaBody "LANGUAGE" line =
+      map renderLanguagePragma (parseLanguageExtensions extensions)
+  | Just options <- parsePragmaBody "OPTIONS_GHC" line =
+      [renderOptionsGhcPragma options]
+  | otherwise = [trim line]
+
+parsePragmaBody :: String -> String -> Maybe String
+parsePragmaBody pragmaName line = do
+  afterOpen <- stripPrefix "{-#" (trimLeft line)
+  afterName <- stripPrefix pragmaName (trimLeft afterOpen)
+  pure (trim (dropPragmaClose afterName))
+
+dropPragmaClose :: String -> String
+dropPragmaClose value =
+  let trimmed = trim value
+   in if "#-}" `isSuffixOf` trimmed
+        then take (length trimmed - 3) trimmed
+        else trimmed
+
+parseLanguageExtensions :: String -> [String]
+parseLanguageExtensions =
+  words . map normalizeExtensionSeparator
+  where
+    normalizeExtensionSeparator ',' = ' '
+    normalizeExtensionSeparator char = char
+
+renderOptionsGhcPragma :: String -> String
+renderOptionsGhcPragma options =
+  "{-# OPTIONS_GHC " ++ unwords (words options) ++ " #-}"
 
 bundleDefaultExtensions :: PackageInfo -> ExecutableInfo -> [String]
 bundleDefaultExtensions packageInfo executableInfo =
@@ -245,11 +278,9 @@ usesPackageImport externalImport =
 renderOpaqueEitherHelper :: [SourceModule] -> [String]
 renderOpaqueEitherHelper sourceModules
   | any sourceModuleRequiresOpaqueEitherHelper sourceModules =
-      [ "-- bundler note: opaque Template Haskell Either constructor expansion kept as Left diagnostic payload"
-      , opaqueEitherHelperName ++ " :: Prelude.String -> Prelude.Either Prelude.String a"
+      [ opaqueEitherHelperName ++ " :: Prelude.String -> Prelude.Either Prelude.String a"
       , "{-# NOINLINE " ++ opaqueEitherHelperName ++ " #-}"
       , opaqueEitherHelperName ++ " = Prelude.Left"
-      , ""
       ]
   | otherwise = []
 
@@ -261,66 +292,282 @@ opaqueEitherHelperName :: String
 opaqueEitherHelperName =
   "bundler_internal_opaque_either"
 
-semanticSensitivePragmaNotes :: [String] -> [String]
-semanticSensitivePragmaNotes pragmas =
-  [ "-- bundler note: semantic-sensitive extension retained globally: " ++ extension
-  | extension <- semanticSensitiveExtensions
-  , any (mentionsLanguageExtension extension) pragmas
-  ]
+compactSourceModules :: CoreLiveSet -> [SourceModule] -> [SourceModule]
+compactSourceModules liveSet sourceModules =
+  map compactSourceModule sourceModules
+  where
+    liveIdentifiers = liveGeneratedIdentifiers liveSet
+    sourceReferences = sourceReferencedIdentifiers sourceModules
 
-semanticSensitiveExtensions :: [String]
-semanticSensitiveExtensions =
-  ["NoImplicitPrelude", "RebindableSyntax", "QualifiedDo"]
+    compactSourceModule sourceModule =
+      sourceModule
+        { sourceModuleDeclarationGroups =
+            map (compactDeclarationGroup liveIdentifiers sourceReferences)
+              (filter (shouldRetainDeclarationGroup liveIdentifiers) (sourceModuleDeclarationGroups sourceModule))
+        }
 
-syntheticPathsModuleNotes :: PackageInfo -> [SourceModule] -> [String]
-syntheticPathsModuleNotes packageInfo sourceModules =
-  [ "-- bundler note: synthetic "
-      ++ packagePathsModuleName packageInfo
-      ++ " directory functions return current-directory relative paths"
-  | usesSyntheticPathsDirectoryFunction (packagePathsModuleName packageInfo) sourceModules
-  ]
+sourceReferencedIdentifiers :: [SourceModule] -> Set.Set String
+sourceReferencedIdentifiers sourceModules =
+  Set.fromList
+    [ token
+    | sourceModule <- sourceModules
+    , group <- sourceModuleDeclarationGroups sourceModule
+    , let groupLines = declarationGroupLines group
+    , not (isClassGroup groupLines)
+    , not (isInstanceGroup groupLines)
+    , line <- groupLines
+    , token <- generatedIdentifierTokens line
+    ]
 
-usesSyntheticPathsDirectoryFunction :: String -> [SourceModule] -> Bool
-usesSyntheticPathsDirectoryFunction pathsModuleName =
-  any (sourceModuleUsesSyntheticPathsDirectoryFunction pathsModuleName)
+shouldRetainDeclarationGroup :: Set.Set String -> DeclarationGroup -> Bool
+shouldRetainDeclarationGroup liveIdentifiers group
+  | isInstanceGroup (declarationGroupLines group) =
+      instanceGroupIsLive liveIdentifiers (declarationGroupLines group)
+  | otherwise = True
 
-sourceModuleUsesSyntheticPathsDirectoryFunction :: String -> SourceModule -> Bool
-sourceModuleUsesSyntheticPathsDirectoryFunction pathsModuleName sourceModule =
-  any
-    (declarationGroupUsesSyntheticPathsDirectoryFunction pathsModuleName)
-    (sourceModuleDeclarationGroups sourceModule)
+compactDeclarationGroup :: Set.Set String -> Set.Set String -> DeclarationGroup -> DeclarationGroup
+compactDeclarationGroup liveIdentifiers sourceReferences group =
+  group
+    { declarationGroupLines =
+        compactGroupLines liveIdentifiers sourceReferences (declarationGroupLines group)
+    }
 
-declarationGroupUsesSyntheticPathsDirectoryFunction :: String -> DeclarationGroup -> Bool
-declarationGroupUsesSyntheticPathsDirectoryFunction pathsModuleName group =
-  any
-    (mappingUsesSyntheticPathsDirectoryFunction pathsModuleName)
-    (declarationGroupMappings group)
+compactGroupLines :: Set.Set String -> Set.Set String -> [String] -> [String]
+compactGroupLines liveIdentifiers sourceReferences group
+  | isDataOrNewtypeGroup group =
+      rewriteDerivingBlock (derivedClassIsLive liveIdentifiers group) group
+  | isClassGroup group =
+      removeUnusedClassMethodLines liveIdentifiers sourceReferences group
+  | isInstanceGroup group =
+      removeUnusedClassMethodLines liveIdentifiers sourceReferences group
+  | otherwise = group
 
-mappingUsesSyntheticPathsDirectoryFunction :: String -> DeclarationMapping -> Bool
-mappingUsesSyntheticPathsDirectoryFunction pathsModuleName mapping =
-  mappingOriginalModule mapping == pathsModuleName
-    && mappingOriginalOccurrence mapping `elem` syntheticPathsDirectoryFunctions
+instanceGroupIsLive :: Set.Set String -> [String] -> Bool
+instanceGroupIsLive liveIdentifiers group =
+  case instanceClassAndTarget group of
+    Nothing -> True
+    Just (className, targetName) ->
+      dictionaryIsLive liveIdentifiers className targetName
 
-syntheticPathsDirectoryFunctions :: [String]
-syntheticPathsDirectoryFunctions =
-  [ "getBinDir"
-  , "getLibDir"
-  , "getDynLibDir"
-  , "getDataDir"
-  , "getLibexecDir"
-  , "getSysconfDir"
-  , "getDataFileName"
-  ]
+instanceClassAndTarget :: [String] -> Maybe (String, String)
+instanceClassAndTarget group = do
+  let headText = instanceHeadText group
+      classHead =
+        case splitOnToken "=>" headText of
+          Just (_context, instancePart) -> instancePart
+          Nothing ->
+            fromMaybe headText (stripPrefix "instance " headText)
+      headWords = words classHead
+  classWord <- listToMaybe headWords
+  targetName <- listToMaybe (filter isGeneratedTypeToken (drop 1 (generatedIdentifierTokens classHead)))
+  pure (lastIdentifierSegment classWord, targetName)
 
-mentionsLanguageExtension :: String -> String -> Bool
-mentionsLanguageExtension extension pragma =
-  ("{-# LANGUAGE" `isPrefixOf` trimLeft pragma)
-    && extension `elem` words (map normalizePragmaChar pragma)
+instanceHeadText :: [String] -> String
+instanceHeadText =
+  beforeWord " where" . unwords . map trim
 
-normalizePragmaChar :: Char -> Char
-normalizePragmaChar char
-  | char `elem` "{#-}," = ' '
-  | otherwise = char
+beforeWord :: String -> String -> String
+beforeWord word value =
+  case splitOnToken word value of
+    Just (prefix, _suffix) -> prefix
+    Nothing               -> value
+
+splitOnToken :: String -> String -> Maybe (String, String)
+splitOnToken token =
+  go []
+  where
+    go _ [] = Nothing
+    go reversedPrefix remaining
+      | token `isPrefixOf` remaining = Just (reverse reversedPrefix, drop (length token) remaining)
+    go reversedPrefix (char : rest) =
+      go (char : reversedPrefix) rest
+
+derivedClassIsLive :: Set.Set String -> [String] -> String -> Bool
+derivedClassIsLive liveIdentifiers group className =
+  case declaredTypeName group of
+    Nothing -> True
+    Just typeName ->
+      dictionaryIsLive liveIdentifiers className typeName
+
+dictionaryIsLive :: Set.Set String -> String -> String -> Bool
+dictionaryIsLive liveIdentifiers className targetName =
+  any matchesDictionary (Set.toList liveIdentifiers)
+  where
+    classBase = lastIdentifierSegment className
+
+    matchesDictionary identifier =
+      "$f" `isPrefixOf` identifier
+        && classBase `isInfixOf` identifier
+        && targetName `isInfixOf` identifier
+
+isGeneratedTypeToken :: String -> Bool
+isGeneratedTypeToken (first : _) = first == 'C'
+isGeneratedTypeToken []          = False
+
+removeUnusedClassMethodLines :: Set.Set String -> Set.Set String -> [String] -> [String]
+removeUnusedClassMethodLines liveIdentifiers sourceReferences group
+  | isClassGroup group =
+      removeMethodDefinitions liveIdentifiers sourceReferences
+        (removeClassMethodSignatures liveIdentifiers sourceReferences group)
+  | isInstanceGroup group = removeMethodDefinitions liveIdentifiers sourceReferences group
+  | otherwise = group
+
+removeClassMethodSignatures :: Set.Set String -> Set.Set String -> [String] -> [String]
+removeClassMethodSignatures liveIdentifiers sourceReferences group =
+  header ++ go body
+  where
+    (header, body) = splitDeclarationHeader group
+
+    go [] = []
+    go (line : rest)
+      | Just methodName <- classMethodSignatureName line
+      , not (methodIsLive liveIdentifiers sourceReferences methodName) =
+          go (dropWhile (isMethodBlockLine (leadingSpaces line) methodName) rest)
+      | otherwise = line : go rest
+
+classMethodSignatureName :: String -> Maybe String
+classMethodSignatureName line = do
+  signatureLeft <- beforeToken "::" line
+  let methodName = firstToken signatureLeft
+  if null methodName || methodName `elem` nonMethodDeclarationTokens
+    then Nothing
+    else Just methodName
+
+removeMethodDefinitions :: Set.Set String -> Set.Set String -> [String] -> [String]
+removeMethodDefinitions liveIdentifiers sourceReferences group =
+  header ++ go body
+  where
+    (header, body) = splitDeclarationHeader group
+
+    go [] = []
+    go (line : rest)
+      | Just methodName <- methodDefinitionName line
+      , not (methodIsLive liveIdentifiers sourceReferences methodName) =
+          go (dropWhile (isMethodBlockLine (leadingSpaces line) methodName) rest)
+      | otherwise = line : go rest
+
+methodDefinitionName :: String -> Maybe String
+methodDefinitionName line =
+  let methodName = firstToken line
+      trimmed = trimLeft line
+   in if leadingSpaces line <= 0
+        || null methodName
+        || "{-#" `isPrefixOf` trimmed
+        || methodName `elem` nonMethodDeclarationTokens
+        then Nothing
+        else Just methodName
+
+nonMethodDeclarationTokens :: [String]
+nonMethodDeclarationTokens =
+  ["type", "data", "newtype"]
+
+isMethodBlockLine :: Int -> String -> String -> Bool
+isMethodBlockLine methodIndent methodName line =
+  leadingSpaces line > methodIndent
+    || (leadingSpaces line == methodIndent && firstToken line == methodName)
+
+methodIsLive :: Set.Set String -> Set.Set String -> String -> Bool
+methodIsLive liveIdentifiers sourceReferences methodName =
+  Set.member methodName sourceReferences
+    || Set.member methodName liveIdentifiers
+    || any (methodName `isInfixOf`) (Set.toList liveIdentifiers)
+
+splitDeclarationHeader :: [String] -> ([String], [String])
+splitDeclarationHeader =
+  go []
+  where
+    go header [] = (reverse header, [])
+    go header (line : rest)
+      | declarationHeaderEnds line = (reverse (line : header), rest)
+      | otherwise = go (line : header) rest
+
+declarationHeaderEnds :: String -> Bool
+declarationHeaderEnds line =
+  " where" `isInfixOf` line || trim line == "where"
+
+declaredTypeName :: [String] -> Maybe String
+declaredTypeName group
+  | isDataOrNewtypeGroup group =
+      case group of
+        firstLine : _ ->
+          case generatedIdentifierTokens firstLine of
+            _keyword : typeName : _ -> Just typeName
+            _                     -> Nothing
+        [] -> Nothing
+  | otherwise = Nothing
+
+derivingBlocks :: [String] -> [[String]]
+derivingBlocks =
+  go
+  where
+    go [] = []
+    go (line : rest)
+      | "deriving (" `isInfixOf` line =
+          let (derivingLines, remaining) = collectDerivingLines [line] rest
+           in derivingLines : go remaining
+      | otherwise = go rest
+
+rewriteDerivingBlock :: (String -> Bool) -> [String] -> [String]
+rewriteDerivingBlock keepClass group =
+  go group
+  where
+    go [] = []
+    go (line : rest)
+      | "deriving (" `isInfixOf` line =
+          let (derivingLines, remaining) = collectDerivingLines [line] rest
+              classes = parseDerivingClasses derivingLines
+              keptClasses = filter keepClass classes
+           in renderDerivingClasses keptClasses ++ go remaining
+      | otherwise = line : go rest
+
+collectDerivingLines :: [String] -> [String] -> ([String], [String])
+collectDerivingLines collected [] = (reverse collected, [])
+collectDerivingLines collected rest@(line : remaining)
+  | ")" `isInfixOf` head collected = (reverse collected, rest)
+  | otherwise = collectDerivingLines (line : collected) remaining
+
+parseDerivingClasses :: [String] -> [String]
+parseDerivingClasses derivingLines =
+  filter (not . null) (map cleanClassName rawClasses)
+  where
+    rawClasses =
+      words
+        [ if char `elem` ("()," :: String) then ' ' else char
+        | char <- unwords derivingLines
+        , char /= '\n'
+        ]
+
+    cleanClassName "deriving" = ""
+    cleanClassName value      = trim value
+
+renderDerivingClasses :: [String] -> [String]
+renderDerivingClasses [] = []
+renderDerivingClasses classes =
+  ["  deriving (" ++ intercalate ", " classes ++ ")"]
+
+isDataOrNewtypeGroup :: [String] -> Bool
+isDataOrNewtypeGroup group =
+  case group of
+    firstLine : _ ->
+      let first = trimLeft firstLine
+       in "data " `isPrefixOf` first || "newtype " `isPrefixOf` first
+    [] -> False
+
+isClassGroup :: [String] -> Bool
+isClassGroup group =
+  case group of
+    firstLine : _ -> "class " `isPrefixOf` trimLeft firstLine
+    []            -> False
+
+isInstanceGroup :: [String] -> Bool
+isInstanceGroup group =
+  case group of
+    firstLine : _ -> "instance " `isPrefixOf` trimLeft firstLine
+    []            -> False
+
+leadingSpaces :: String -> Int
+leadingSpaces =
+  length . takeWhile isSpace
 
 collectBundleExternalImports :: [(String, String)] -> [String] -> [(String, GlobalRdrEnv)] -> [LoadedModule] -> [ExternalImport]
 collectBundleExternalImports unitPackageNames internalModuleNames internalGlobalRdrEnvs loadedModules =
@@ -346,8 +593,8 @@ loadedModuleNames :: LoadedModule -> [Name]
 loadedModuleNames loadedModule =
   maybe [] collectRenamedNames (loadedRenamedSource loadedModule)
 
-buildDeclarationMappings :: [String] -> LoadedModule -> [DeclarationMapping]
-buildDeclarationMappings internalModuleNames loadedModule =
+buildDeclarationMappings :: NameStyle -> [String] -> LoadedModule -> [DeclarationMapping]
+buildDeclarationMappings nameStyle internalModuleNames loadedModule =
   sort . nub $
     [ DeclarationMapping
         { mappingOriginalModule = transformOriginalModule transform
@@ -356,7 +603,7 @@ buildDeclarationMappings internalModuleNames loadedModule =
         , mappingDeclarationGroup = loadedModuleName loadedModule
         }
     | name <- loadedModuleNames loadedModule
-    , transform <- maybeToList (generatedIdentifierFromName internalModuleNames name)
+    , transform <- maybeToList (generatedIdentifierFromNameWithStyle nameStyle internalModuleNames name)
     , transformOriginalModule transform == loadedModuleName loadedModule
     ]
 
@@ -836,8 +1083,8 @@ isOperatorChar :: Char -> Bool
 isOperatorChar char =
   char `elem` ("!#$%&*+./<=>?@\\^|-~:" :: String)
 
-findEntryBinding :: [String] -> ExecutableInfo -> [LoadedModule] -> Either String String
-findEntryBinding internalModuleNames executableInfo loadedModules =
+findEntryBinding :: NameStyle -> [String] -> ExecutableInfo -> [LoadedModule] -> Either String String
+findEntryBinding nameStyle internalModuleNames executableInfo loadedModules =
   selectEntryBinding entryCandidates
   where
     entryModules =
@@ -851,7 +1098,7 @@ findEntryBinding internalModuleNames executableInfo loadedModules =
           )
         | loadedModule <- entryModules
         , name <- loadedModuleNames loadedModule
-        , transform <- maybeToList (generatedIdentifierFromName internalModuleNames name)
+        , transform <- maybeToList (generatedIdentifierFromNameWithStyle nameStyle internalModuleNames name)
         , transformOriginalOccurrence transform == "main"
         ]
 
@@ -875,15 +1122,15 @@ isExecutableEntryModule executableInfo loadedModule =
     Nothing -> False
     Just filePath -> normalise filePath == normalise (executableMainPath executableInfo)
 
-findGeneratedNameConflict :: [String] -> [LoadedModule] -> Maybe (String, String)
-findGeneratedNameConflict internalModuleNames loadedModules =
+findGeneratedNameConflict :: NameStyle -> [String] -> [LoadedModule] -> Maybe (String, String)
+findGeneratedNameConflict nameStyle internalModuleNames loadedModules =
   findConflict generatedNames
   where
     generatedNames =
       [ (name, transform)
       | loadedModule <- loadedModules
       , name <- loadedModuleNames loadedModule
-      , transform <- maybeToList (generatedIdentifierFromName internalModuleNames name)
+      , transform <- maybeToList (generatedIdentifierFromNameWithStyle nameStyle internalModuleNames name)
       ]
 
 findConflict :: [(Name, NameTransform)] -> Maybe (String, String)

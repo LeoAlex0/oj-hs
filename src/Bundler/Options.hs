@@ -7,13 +7,14 @@ module Bundler.Options
 import           Options.Applicative (Parser, ParserInfo, execParser, fullDesc,
                                       header, help, helper, info, long, metavar,
                                       optional, progDesc, short, showDefault,
-                                      strOption, value)
+                                      strOption, switch, value)
 
 data BundleOptions
   = BundleOptions
       { optExecutable :: Maybe String
       , optOutput     :: Maybe FilePath
       , optPackageDir :: FilePath
+      , optCompactNames  :: Bool
       }
   deriving (Eq, Show)
 
@@ -53,6 +54,10 @@ bundleOptionsParser =
           <> value "."
           <> showDefault
           <> help "Package directory containing the .cabal file."
+      )
+    <*> switch
+      ( long "compact-names"
+          <> help "Use short hash-based generated names instead of readable module/occurrence names."
       )
 
 (<**>) :: Parser a -> Parser (a -> b) -> Parser b

@@ -21,6 +21,10 @@ cabal run bundler -- --exec luogu-wip -o bundled-luogu.hs
 - `--package-dir <dir>` 选择包含 `.cabal` 文件的 package 目录，默认是当前目录。
   Selects the package directory containing the `.cabal` file. The default is
   the current directory.
+- `--compact-names` 使用短 hash 生成名。默认输出会保留模块名和原始标识符，便于
+  阅读和调试。
+  Uses short hash-based generated names. By default, generated names keep the
+  module and original occurrence visible for easier reading and debugging.
 
 ## 示例 / Examples
 
@@ -40,14 +44,16 @@ bundler's stdout output.
 MVP 依赖 Cabal 和 GHC 加载选中的 executable、发现可达模块、展开 CPP、在类型检查
 期间运行 Template Haskell，并产出 renamed/typechecked module data。输出结果是
 一个 `module Main (main) where` 源文件：内部模块会被拉平，内部名称会被改写成
-确定性的生成名称，普通外部引用会通过 qualified imports 渲染。
+确定性的生成名称，普通外部引用会通过 qualified imports 渲染。默认生成名称偏向
+可读性；传 `--compact-names` 时会改用更短的 hash 名以进一步压缩输出。
 
 The MVP relies on Cabal and GHC to load the selected executable, discover
 reachable modules, expand CPP, run Template Haskell during typechecking, and
 produce renamed/typechecked module data. The output is a `module Main (main)
 where` source file with internal modules flattened, internal names rewritten to
 deterministic generated names, and ordinary external references rendered through
-qualified imports.
+qualified imports. Generated names are readable by default; pass
+`--compact-names` to switch to shorter hash-based names for smaller output.
 
 Core pruning 会在拉平后的候选 `Main` 模块上执行。Bundler 使用从 `main` 出发的
 Core 可达性删除最终入口点不需要的声明组，同时保守保留无法安全映射的声明组，或被

@@ -31,11 +31,6 @@ spec = describe "bundler integration" $ do
       source `shouldSatisfy` (not . ("import qualified Data.FingerTree" `isInfixOf`))
       compileBundledSource outputDir "codeforces-wip.hs"
 
-    it "bundles custom-setup into a standalone Main module" $ \outputDir -> do
-      source <- bundleExecutable outputDir "custom-setup"
-      source `shouldSatisfy` ("module Main (main) where" `isInfixOf`)
-      compileBundledSourceForExecutable outputDir "custom-setup.hs" "custom-setup"
-
     it "bootstraps bundler deterministically" $ \outputDir -> do
       firstSource <- bundleExecutable outputDir "bundler"
       firstSource `shouldSatisfy` (not . containsBundlerEnvironmentValue [outputDir])
@@ -64,7 +59,7 @@ spec = describe "bundler integration" $ do
 bundleExecutable :: FilePath -> String -> IO String
 bundleExecutable outputDir executableName = do
   let outputPath = outputDir </> executableName ++ ".hs"
-  result <- runBundler (BundleOptions (Just executableName) (Just outputPath) ".")
+  result <- runBundler (BundleOptions (Just executableName) (Just outputPath) "." False)
   case result of
     Left err -> expectationFailure (show err) >> pure ""
     Right () -> readFile outputPath

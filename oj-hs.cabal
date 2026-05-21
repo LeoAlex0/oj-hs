@@ -14,7 +14,7 @@ maintainer:     z.alex.leo@outlook.com
 copyright:      zLeoAlex
 license:        BSD-3-Clause
 license-file:   LICENSE
-build-type:     Custom
+build-type:     Simple
 extra-source-files:
     README.md
     app/bundler/README.md
@@ -23,11 +23,6 @@ extra-source-files:
 source-repository head
   type: git
   location: https://github.com/LeoAlex0/oj-hs
-
-custom-setup
-  setup-depends:
-      Cabal ==3.*
-    , base >=4.7 && <5
 
 library
   exposed-modules:
@@ -85,14 +80,14 @@ library
     , vector
   default-language: Haskell2010
 
-executable codeforces-wip
+executable bundler
   main-is: Main.hs
   other-modules:
       Paths_oj_hs
   autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
-      app/codeforces-wip
+      app/bundler
   build-depends:
       Cabal ==3.*
     , array
@@ -116,42 +111,14 @@ executable codeforces-wip
     , vector
   default-language: Haskell2010
 
-executable custom-setup
-  main-is: ./Setup.hs
-  other-modules:
-      Paths_oj_hs
-  autogen-modules:
-      Paths_oj_hs
-  build-depends:
-      Cabal ==3.*
-    , array
-    , base >=4.7 && <5
-    , bytestring
-    , containers
-    , deepseq
-    , directory
-    , filepath
-    , ghc
-    , hashable
-    , mtl
-    , optparse-applicative
-    , parsec
-    , parser-combinators
-    , process
-    , text
-    , time
-    , unordered-containers
-    , vector
-  default-language: Haskell2010
-
-executable bundler
+executable codeforces-wip
   main-is: Main.hs
   other-modules:
       Paths_oj_hs
   autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
-      app/bundler
+      app/codeforces-wip
   build-depends:
       Cabal ==3.*
     , array
@@ -223,6 +190,8 @@ test-suite oj-hs-test
   hs-source-dirs:
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-tool-depends:
+      hspec-discover:hspec-discover
   build-depends:
       Cabal ==3.*
     , HUnit
@@ -255,6 +224,7 @@ benchmark benchmark-prac-haskell-bench
   main-is: BenchMain.hs
   other-modules:
       Algorithm.KMP.Bench
+      BenchDiscover
       Data.FingerTree.Bench
       Data.SegTree.Bench
       Paths_oj_hs
@@ -263,13 +233,14 @@ benchmark benchmark-prac-haskell-bench
   hs-source-dirs:
       bench
   ghc-options: -O2
+  build-tool-depends:
+      tasty-discover:tasty-discover
   build-depends:
       Cabal ==3.*
     , array
     , base >=4.7 && <5
     , bytestring
     , containers
-    , criterion
     , deepseq
     , directory
     , filepath
@@ -282,6 +253,8 @@ benchmark benchmark-prac-haskell-bench
     , parser-combinators
     , process
     , random
+    , tasty
+    , tasty-bench
     , text
     , time
     , unordered-containers
