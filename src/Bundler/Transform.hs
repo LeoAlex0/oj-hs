@@ -10,8 +10,7 @@ module Bundler.Transform
   ) where
 
 import           Bundler.Rename                      (NameOrigin (ExternalName, InternalName, LocalName, WiredInName),
-                                                      NameStyle,
-                                                      classifyName,
+                                                      NameStyle, classifyName,
                                                       generatedIdentifierFromNameWithStyle,
                                                       transformGeneratedIdentifier)
 import           Data.Char                           (isAlpha, isAlphaNum,

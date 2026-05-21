@@ -32,9 +32,7 @@ data NameOrigin
   | WiredInName
   deriving (Eq, Show)
 
-data NameStyle
-  = ReadableNames
-  | CompactNames
+data NameStyle = ReadableNames | CompactNames
   deriving (Eq, Show)
 
 data NameTransform
@@ -81,8 +79,7 @@ isGeneratedNameConflict left right =
        )
 
 generatedIdentifier :: String -> String -> NameTransform
-generatedIdentifier sourceModuleName occurrenceName =
-  generatedIdentifierWithStyle ReadableNames sourceModuleName occurrenceName
+generatedIdentifier = generatedIdentifierWithStyle ReadableNames
 
 generatedIdentifierWithStyle :: NameStyle -> String -> String -> NameTransform
 generatedIdentifierWithStyle nameStyle sourceModuleName occurrenceName =
@@ -94,8 +91,7 @@ generatedIdentifierWithStyle nameStyle sourceModuleName occurrenceName =
     }
 
 generatedIdentifierFromName :: [String] -> Name -> Maybe NameTransform
-generatedIdentifierFromName internalModules name =
-  generatedIdentifierFromNameWithStyle ReadableNames internalModules name
+generatedIdentifierFromName = generatedIdentifierFromNameWithStyle ReadableNames
 
 generatedIdentifierFromNameWithStyle :: NameStyle -> [String] -> Name -> Maybe NameTransform
 generatedIdentifierFromNameWithStyle nameStyle internalModules name =

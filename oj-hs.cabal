@@ -51,6 +51,9 @@ library
       Solution.Codeforces.P1302C
       Solution.Luogu.P1383
       Solution.Luogu.P3156
+      System.IO.Fast
+      System.IO.Fast.ST
+      System.IO.Fast.Stream
   other-modules:
       Paths_oj_hs
   autogen-modules:
@@ -185,6 +188,7 @@ test-suite oj-hs-test
       Bundler.SourceBundleSpec
       Data.TrieSpec
       Paths_oj_hs
+      System.IO.FastSpec
   autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
@@ -228,6 +232,7 @@ benchmark benchmark-prac-haskell-bench
       Data.FingerTree.Bench
       Data.SegTree.Bench
       Paths_oj_hs
+      System.IO.Fast.Bench
   autogen-modules:
       Paths_oj_hs
   hs-source-dirs:

@@ -11,10 +11,10 @@ import           Options.Applicative (Parser, ParserInfo, execParser, fullDesc,
 
 data BundleOptions
   = BundleOptions
-      { optExecutable :: Maybe String
-      , optOutput     :: Maybe FilePath
-      , optPackageDir :: FilePath
-      , optCompactNames  :: Bool
+      { optExecutable   :: Maybe String
+      , optOutput       :: Maybe FilePath
+      , optPackageDir   :: FilePath
+      , optCompactNames :: Bool
       }
   deriving (Eq, Show)
 

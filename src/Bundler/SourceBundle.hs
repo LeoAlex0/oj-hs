@@ -9,8 +9,7 @@ import           Bundler.DCE               (CoreLiveSet (..),
 import           Bundler.Error             (BundleError (GhcLoadFailed, SourceBundleFailed, SymbolConflict))
 import           Bundler.GHC               (LoadedGhcModules (..),
                                             LoadedModule (..))
-import           Bundler.Rename            (NameStyle,
-                                            NameTransform,
+import           Bundler.Rename            (NameStyle, NameTransform,
                                             generatedIdentifierFromNameWithStyle,
                                             transformGeneratedIdentifier,
                                             transformOriginalModule,
@@ -22,10 +21,10 @@ import           Bundler.Transform         (ExternalImport (..),
                                             renderRenamedDeclarations)
 import           Data.Char                 (isAsciiLower, isAsciiUpper, isDigit,
                                             isSpace)
-import           Data.List                 (intercalate, isInfixOf, isPrefixOf,
-                                            isSuffixOf, nub, sort, stripPrefix)
-import           Data.Maybe                (fromMaybe, listToMaybe,
-                                            maybeToList)
+import           Data.List                 (find, intercalate, isInfixOf,
+                                            isPrefixOf, isSuffixOf, nub, sort,
+                                            stripPrefix)
+import           Data.Maybe                (fromMaybe, listToMaybe, maybeToList)
 import qualified Data.Set                  as Set
 import           GHC.Types.Name            (Name, nameOccName)
 import           GHC.Types.Name.Occurrence (NameSpace, occNameSpace,
@@ -216,8 +215,7 @@ renderSourceModule sourceModule =
   concatMap renderDeclarationGroup (sourceModuleDeclarationGroups sourceModule)
 
 renderDeclarationGroup :: DeclarationGroup -> [String]
-renderDeclarationGroup group =
-  declarationGroupLines group
+renderDeclarationGroup = declarationGroupLines
 
 renderLanguagePragma :: String -> String
 renderLanguagePragma extension =
@@ -252,7 +250,7 @@ parseLanguageExtensions :: String -> [String]
 parseLanguageExtensions =
   words . map normalizeExtensionSeparator
   where
-    normalizeExtensionSeparator ',' = ' '
+    normalizeExtensionSeparator ','  = ' '
     normalizeExtensionSeparator char = char
 
 renderOptionsGhcPragma :: String -> String
@@ -359,7 +357,7 @@ instanceClassAndTarget group = do
             fromMaybe headText (stripPrefix "instance " headText)
       headWords = words classHead
   classWord <- listToMaybe headWords
-  targetName <- listToMaybe (filter isGeneratedTypeToken (drop 1 (generatedIdentifierTokens classHead)))
+  targetName <- Data.List.find isGeneratedTypeToken (drop 1 (generatedIdentifierTokens classHead))
   pure (lastIdentifierSegment classWord, targetName)
 
 instanceHeadText :: [String] -> String
@@ -370,7 +368,7 @@ beforeWord :: String -> String -> String
 beforeWord word value =
   case splitOnToken word value of
     Just (prefix, _suffix) -> prefix
-    Nothing               -> value
+    Nothing                -> value
 
 splitOnToken :: String -> String -> Maybe (String, String)
 splitOnToken token =
@@ -464,7 +462,7 @@ nonMethodDeclarationTokens =
 isMethodBlockLine :: Int -> String -> String -> Bool
 isMethodBlockLine methodIndent methodName line =
   leadingSpaces line > methodIndent
-    || (leadingSpaces line == methodIndent && firstToken line == methodName)
+    || leadingSpaces line == methodIndent && firstToken line == methodName
 
 methodIsLive :: Set.Set String -> Set.Set String -> String -> Bool
 methodIsLive liveIdentifiers sourceReferences methodName =
@@ -492,7 +490,7 @@ declaredTypeName group
         firstLine : _ ->
           case generatedIdentifierTokens firstLine of
             _keyword : typeName : _ -> Just typeName
-            _                     -> Nothing
+            _                       -> Nothing
         [] -> Nothing
   | otherwise = Nothing
 
@@ -508,8 +506,7 @@ derivingBlocks =
       | otherwise = go rest
 
 rewriteDerivingBlock :: (String -> Bool) -> [String] -> [String]
-rewriteDerivingBlock keepClass group =
-  go group
+rewriteDerivingBlock keepClass = go
   where
     go [] = []
     go (line : rest)
