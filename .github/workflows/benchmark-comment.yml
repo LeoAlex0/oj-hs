@@ -69,7 +69,7 @@ jobs:
           env \
             BASE_REF="$base_ref" \
             BENCHMARK_BASE_DIR="artifacts/benchmark-base" \
-            BENCHMARK_CURRENT_JSON="artifacts/benchmark-current/bench.json" \
+            BENCHMARK_CURRENT_CSV="artifacts/benchmark-current/bench.csv" \
             BENCHMARK_SUMMARY="benchmark-summary.md" \
             CURRENT_REF="$current_ref" \
             GH_TOKEN="$GH_TOKEN" \

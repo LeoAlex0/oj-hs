@@ -3,8 +3,8 @@ set -euo pipefail
 
 marker="<!-- oj-hs-benchmark-report -->"
 
-current_json="${BENCHMARK_CURRENT_JSON:-bench.json}"
-base_json_override="${BENCHMARK_BASE_JSON:-}"
+current_csv="${BENCHMARK_CURRENT_CSV:-bench.csv}"
+base_csv_override="${BENCHMARK_BASE_CSV:-}"
 base_dir="${BENCHMARK_BASE_DIR:-artifacts/benchmark-base}"
 summary_file="${BENCHMARK_SUMMARY:-benchmark-summary.md}"
 
@@ -153,25 +153,33 @@ gh_api_write() {
   return 1
 }
 
-if [ ! -s "$current_json" ]; then
-  echo "Benchmark JSON not found: $current_json" >&2
+csv_to_tsv() {
+  awk -F ',' '
+    NR > 1 && NF >= 2 {
+      name = $1
+      mean_seconds = $2 / 1000000000000
+      print name "\t" mean_seconds
+    }
+  ' "$1"
+}
+
+if [ ! -s "$current_csv" ]; then
+  echo "Benchmark CSV not found: $current_csv" >&2
   exit 1
 fi
 
-jq -r '.[2][] | [.reportName, .reportAnalysis.anMean.estPoint] | @tsv' \
-  "$current_json" > "$current_tsv"
+csv_to_tsv "$current_csv" > "$current_tsv"
 
 baseline_status="missing"
-baseline_json=""
+baseline_csv=""
 baseline_run_id=""
 
 mkdir -p "$base_dir"
 
-if [ -n "$base_json_override" ] && [ -s "$base_json_override" ]; then
-  baseline_json="$base_json_override"
+if [ -n "$base_csv_override" ] && [ -s "$base_csv_override" ]; then
+  baseline_csv="$base_csv_override"
   baseline_status="available"
-  jq -r '.[2][] | [.reportName, .reportAnalysis.anMean.estPoint] | @tsv' \
-    "$baseline_json" > "$base_tsv"
+  csv_to_tsv "$baseline_csv" > "$base_tsv"
 elif [ -n "$repo" ] && [ -n "$base_ref" ] && [ -n "${GH_TOKEN:-}" ]; then
   baseline_run_id="$(
     gh run list \
@@ -190,13 +198,12 @@ elif [ -n "$repo" ] && [ -n "$base_ref" ] && [ -n "${GH_TOKEN:-}" ]; then
       --repo "$repo" \
       --name benchmark-report \
       --dir "$base_dir" >/dev/null 2>&1; then
-      if [ -s "$base_dir/bench.json" ]; then
-        baseline_json="$base_dir/bench.json"
+      if [ -s "$base_dir/bench.csv" ]; then
+        baseline_csv="$base_dir/bench.csv"
         baseline_status="available"
-        jq -r '.[2][] | [.reportName, .reportAnalysis.anMean.estPoint] | @tsv' \
-          "$baseline_json" > "$base_tsv"
+        csv_to_tsv "$baseline_csv" > "$base_tsv"
       else
-        baseline_status="artifact-without-json"
+        baseline_status="artifact-without-csv"
       fi
     else
       baseline_status="artifact-missing"
@@ -216,14 +223,14 @@ short_sha="${sha:0:12}"
   fi
   echo "Run: [Benchmark workflow artifacts]($run_url)"
   echo
-  echo "Lower mean time is better. Full Criterion output is available in the \`benchmark-report\` artifact as \`bench.html\` and \`bench.json\`."
+  echo "Lower mean time is better. Full tasty-bench output is available in the \`benchmark-report\` artifact as \`bench.csv\` and \`bench.svg\`."
   echo
 
   if [ "$baseline_status" = "available" ]; then
     if [ -n "$baseline_run_id" ]; then
       echo "Baseline: [latest successful \`Benchmark\` push run on \`$base_ref\`](${server_url}/${repo}/actions/runs/${baseline_run_id})"
     else
-      echo "Baseline: local benchmark JSON"
+      echo "Baseline: local benchmark CSV"
     fi
     echo
     echo "| Benchmark | Base mean | PR mean | Diff |"

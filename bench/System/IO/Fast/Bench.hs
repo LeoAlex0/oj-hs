@@ -12,7 +12,8 @@ import           Data.List               (foldl')
 import qualified System.IO.Fast          as Fast
 import qualified System.IO.Fast.ST       as FastST
 import qualified System.IO.Fast.Stream   as FastStream
-import           Test.Tasty.Bench        (Benchmark, bench, bgroup, env, nf, nfAppIO)
+import           Test.Tasty.Bench        (Benchmark, bench, bgroup, env, nf,
+                                          nfAppIO)
 import           Text.Printf             (printf)
 
 test_fastIO :: Benchmark
