@@ -10,8 +10,8 @@ module Bundler.Transform
   ) where
 
 import           Bundler.Rename                      (NameOrigin (ExternalName, InternalName, LocalName, WiredInName),
-                                                      classifyName,
-                                                      generatedIdentifierFromName,
+                                                      NameStyle, classifyName,
+                                                      generatedIdentifierFromNameWithStyle,
                                                       transformGeneratedIdentifier)
 import           Data.Char                           (isAlpha, isAlphaNum,
                                                       isSpace, isUpper)
@@ -56,13 +56,13 @@ data ExternalImport
       }
   deriving (Eq, Ord, Show)
 
-rewriteRenamedSource :: [String] -> RenamedSource -> RenamedSource
-rewriteRenamedSource internalModules =
-  rewriteData (rewriteName internalModules)
+rewriteRenamedSource :: NameStyle -> [String] -> RenamedSource -> RenamedSource
+rewriteRenamedSource nameStyle internalModules =
+  rewriteData (rewriteName nameStyle internalModules)
 
-renderRenamedDeclarations :: [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> RenamedSource -> [String]
-renderRenamedDeclarations internalModules internalGlobalRdrEnvs globalRdrEnv renamedSource =
-  let (group, _imports, _exports, _docs) = rewriteRenamedSource internalModules renamedSource
+renderRenamedDeclarations :: NameStyle -> [String] -> [(String, GlobalRdrEnv)] -> Maybe GlobalRdrEnv -> RenamedSource -> [String]
+renderRenamedDeclarations nameStyle internalModules internalGlobalRdrEnvs globalRdrEnv renamedSource =
+  let (group, _imports, _exports, _docs) = rewriteRenamedSource nameStyle internalModules renamedSource
    in repairQualifiedRecordFields
         ( repairMultilineCaseLines
             (repairQualifiedBinderLines (lines (renderBundleSDoc internalModules internalGlobalRdrEnvs globalRdrEnv (ppr group))))
@@ -108,9 +108,9 @@ collectExternalIdentifierRewrites internalModules internalGlobalRdrEnvs globalRd
         , qualifierModule <- maybeToList (qualifierModuleForName internalModules internalGlobalRdrEnvs globalRdrEnv name)
         ]
 
-rewriteName :: [String] -> Name -> Name
-rewriteName internalModules name =
-  case generatedIdentifierFromName internalModules name of
+rewriteName :: NameStyle -> [String] -> Name -> Name
+rewriteName nameStyle internalModules name =
+  case generatedIdentifierFromNameWithStyle nameStyle internalModules name of
     Nothing -> name
     Just transform ->
       let originalOccName = nameOccName name

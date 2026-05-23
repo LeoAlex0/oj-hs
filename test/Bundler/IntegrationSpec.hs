@@ -16,7 +16,7 @@ import           Test.Hspec        (Spec, around, describe, expectationFailure,
                                     it, shouldBe, shouldSatisfy)
 
 spec :: Spec
-spec = describe "haskell-bundler integration" $ do
+spec = describe "bundler integration" $ do
   around withTempPackageDir $ do
     it "bundles luogu-wip into a standalone Main module" $ \outputDir -> do
       source <- bundleExecutable outputDir "luogu-wip"
@@ -31,36 +31,24 @@ spec = describe "haskell-bundler integration" $ do
       source `shouldSatisfy` (not . ("import qualified Data.FingerTree" `isInfixOf`))
       compileBundledSource outputDir "codeforces-wip.hs"
 
-    it "bundles custom-setup into a standalone Main module" $ \outputDir -> do
-      source <- bundleExecutable outputDir "custom-setup"
-      source `shouldSatisfy` ("module Main (main) where" `isInfixOf`)
-      compileBundledSourceForExecutable outputDir "custom-setup.hs" "custom-setup"
-
-    it "bundles all-in-one into a standalone Main module" $ \outputDir -> do
-      source <- bundleExecutable outputDir "all-in-one"
-      source `shouldSatisfy` ("module Main (main) where" `isInfixOf`)
-      source `shouldSatisfy` (not . ("import qualified App." `isInfixOf`))
-      source `shouldSatisfy` (not . containsBundlerEnvironmentValue [outputDir])
-      compileBundledSourceForExecutable outputDir "all-in-one.hs" "all-in-one"
-
-    it "bootstraps haskell-bundler deterministically" $ \outputDir -> do
-      firstSource <- bundleExecutable outputDir "haskell-bundler"
+    it "bootstraps bundler deterministically" $ \outputDir -> do
+      firstSource <- bundleExecutable outputDir "bundler"
       firstSource `shouldSatisfy` (not . containsBundlerEnvironmentValue [outputDir])
       firstSource `shouldSatisfy` ("{-# LANGUAGE PackageImports #-}" `isInfixOf`)
       firstSource `shouldSatisfy` ("import qualified \"ghc\" GHC.Core" `isInfixOf`)
       firstSource `shouldSatisfy` (not . ("bundler_internal_opaque_either :: Prelude.String" `isInfixOf`))
-      compileBundledSourceForExecutable outputDir "haskell-bundler.hs" "haskell-bundler"
+      compileBundledSourceForExecutable outputDir "bundler.hs" "bundler"
       bundledBundler <-
         compileBundledExecutableForExecutable
           outputDir
-          "haskell-bundler.hs"
-          "haskell-bundler-bootstrap"
-          "haskell-bundler"
-      let secondOutputPath = outputDir </> "haskell-bundler-second.hs"
+          "bundler.hs"
+          "bundler-bootstrap"
+          "bundler"
+      let secondOutputPath = outputDir </> "bundler-second.hs"
       (exitCode, stdout, stderr) <-
         readProcessWithExitCode
           bundledBundler
-          ["--exec", "haskell-bundler", "--output", secondOutputPath]
+          ["--exec", "bundler", "-o", secondOutputPath]
           ""
       exitCode `shouldBe` ExitSuccess
       stdout `shouldBe` ""
@@ -71,7 +59,7 @@ spec = describe "haskell-bundler integration" $ do
 bundleExecutable :: FilePath -> String -> IO String
 bundleExecutable outputDir executableName = do
   let outputPath = outputDir </> executableName ++ ".hs"
-  result <- runBundler (BundleOptions (Just executableName) outputPath ".")
+  result <- runBundler (BundleOptions (Just executableName) (Just outputPath) "." False)
   case result of
     Left err -> expectationFailure (show err) >> pure ""
     Right () -> readFile outputPath

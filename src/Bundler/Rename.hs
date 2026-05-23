@@ -1,17 +1,18 @@
 module Bundler.Rename
-  ( NameOrigin (..)
+  ( NameStyle (..)
+  , NameOrigin (..)
   , NameTransform (..)
   , classifyName
   , collectExternalModules
   , detectNameTransformConflict
   , generatedIdentifier
+  , generatedIdentifierWithStyle
   , generatedIdentifierFromName
+  , generatedIdentifierFromNameWithStyle
   ) where
 
 import           Data.Bits                           (xor)
-import           Data.Char                           (isAlpha, isAlphaNum,
-                                                      isUpper, ord, toLower,
-                                                      toUpper)
+import           Data.Char                           (isAlphaNum, isUpper, ord)
 import           Data.List                           (nub, sort)
 import           Data.Word                           (Word64)
 import           GHC.Types.Name                      (Name, isWiredInName,
@@ -29,6 +30,9 @@ data NameOrigin
   | ExternalName String
   | LocalName
   | WiredInName
+  deriving (Eq, Show)
+
+data NameStyle = ReadableNames | CompactNames
   deriving (Eq, Show)
 
 data NameTransform
@@ -75,15 +79,22 @@ isGeneratedNameConflict left right =
        )
 
 generatedIdentifier :: String -> String -> NameTransform
-generatedIdentifier sourceModuleName occurrenceName =
+generatedIdentifier = generatedIdentifierWithStyle ReadableNames
+
+generatedIdentifierWithStyle :: NameStyle -> String -> String -> NameTransform
+generatedIdentifierWithStyle nameStyle sourceModuleName occurrenceName =
   NameTransform
     { transformOriginalModule = sourceModuleName
     , transformOriginalOccurrence = occurrenceName
-    , transformGeneratedIdentifier = generatedName sourceModuleName occurrenceName (categoryFromSpelling occurrenceName)
+    , transformGeneratedIdentifier =
+        generatedName nameStyle sourceModuleName occurrenceName (categoryFromSpelling occurrenceName)
     }
 
 generatedIdentifierFromName :: [String] -> Name -> Maybe NameTransform
-generatedIdentifierFromName internalModules name =
+generatedIdentifierFromName = generatedIdentifierFromNameWithStyle ReadableNames
+
+generatedIdentifierFromNameWithStyle :: NameStyle -> [String] -> Name -> Maybe NameTransform
+generatedIdentifierFromNameWithStyle nameStyle internalModules name =
   case classifyName internalModules name of
     InternalName moduleNameValue ->
       let originalOccName = nameOccName name
@@ -93,28 +104,57 @@ generatedIdentifierFromName internalModules name =
               , transformOriginalOccurrence = occNameString originalOccName
               , transformGeneratedIdentifier =
                   generatedName
+                    nameStyle
                     moduleNameValue
                     (occNameString originalOccName)
                     (categoryFromOccName originalOccName)
               }
     _ -> Nothing
 
-generatedName :: String -> String -> GeneratedNameCategory -> String
-generatedName sourceModuleName occurrenceName category =
+generatedName :: NameStyle -> String -> String -> GeneratedNameCategory -> String
+generatedName ReadableNames sourceModuleName occurrenceName category =
   case category of
     VarIdentifier ->
-      lowerIdentifier identifierBase
+      "v_" ++ readableBase
     ConstructorIdentifier ->
-      upperIdentifier identifierBase
+      "C_" ++ readableBase
+    VariableOperator ->
+      "!" ++ occurrenceName ++ "!" ++ operatorBase
+    ConstructorOperator ->
+      ":!" ++ occurrenceName ++ "!" ++ operatorBase
+  where
+    readableBase =
+      encodeIdentifierPart sourceModuleName ++ "_" ++ encodeIdentifierPart occurrenceName
+    stableInput =
+      sourceModuleName ++ "\0" ++ occurrenceName
+    operatorBase =
+      encodeSymbolNumber (compactHashString stableInput)
+generatedName CompactNames sourceModuleName occurrenceName category =
+  case category of
+    VarIdentifier ->
+      "v" ++ digest
+    ConstructorIdentifier ->
+      "C" ++ digest
     VariableOperator ->
       "!" ++ operatorBase
     ConstructorOperator ->
       ":!" ++ operatorBase
   where
-    identifierBase =
-      sanitizeIdentifier sourceModuleName ++ "_" ++ sanitizeIdentifier occurrenceName
+    stableInput =
+      sourceModuleName ++ "\0" ++ occurrenceName
+    digest =
+      encodeIdentifierNumber (compactHashString stableInput)
     operatorBase =
-      encodeSymbolNumber (stableHashString (sourceModuleName ++ "\0" ++ occurrenceName))
+      encodeSymbolNumber (compactHashString stableInput)
+
+encodeIdentifierPart :: String -> String
+encodeIdentifierPart =
+  concatMap encodeIdentifierChar
+
+encodeIdentifierChar :: Char -> String
+encodeIdentifierChar char
+  | isAlphaNum char = [char]
+  | otherwise = "_" ++ show (ord char) ++ "_"
 
 categoryFromOccName :: OccName -> GeneratedNameCategory
 categoryFromOccName occNameValue
@@ -134,28 +174,25 @@ categoryFromOperatorSpelling :: String -> GeneratedNameCategory
 categoryFromOperatorSpelling (':' : _) = ConstructorOperator
 categoryFromOperatorSpelling _         = VariableOperator
 
-sanitizeIdentifier :: String -> String
-sanitizeIdentifier =
-  ensureLeadingAlpha . concatMap sanitizeChar
+encodeIdentifierNumber :: Word64 -> String
+encodeIdentifierNumber 0 = [identifierDigit 0]
+encodeIdentifierNumber value =
+  reverse (go value)
+  where
+    base = fromIntegral (length identifierDigits)
 
-sanitizeChar :: Char -> String
-sanitizeChar char
-  | isAlphaNum char = [char]
-  | otherwise = "_u" ++ show (ord char) ++ "_"
+    go 0 = []
+    go current =
+      let (next, digit) = current `quotRem` base
+       in identifierDigit (fromIntegral digit) : go next
 
-ensureLeadingAlpha :: String -> String
-ensureLeadingAlpha [] = "generated"
-ensureLeadingAlpha value@(first : _)
-  | isAlpha first = value
-  | otherwise = "generated_" ++ value
+identifierDigit :: Int -> Char
+identifierDigit value =
+  identifierDigits !! value
 
-lowerIdentifier :: String -> String
-lowerIdentifier []             = "generated"
-lowerIdentifier (first : rest) = toLower first : rest
-
-upperIdentifier :: String -> String
-upperIdentifier []             = "Generated"
-upperIdentifier (first : rest) = toUpper first : rest
+identifierDigits :: String
+identifierDigits =
+  ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9']
 
 stableHashString :: String -> Word64
 stableHashString =
@@ -163,6 +200,14 @@ stableHashString =
   where
     hashStep current char =
       (current `xor` fromIntegral (ord char)) * 1099511628211
+
+compactHashString :: String -> Word64
+compactHashString value =
+  stableHashString value `rem` compactHashSpace
+
+compactHashSpace :: Word64
+compactHashSpace =
+  281474976710656
 
 encodeSymbolNumber :: Word64 -> String
 encodeSymbolNumber 0 = [operatorDigit 0]

@@ -5,13 +5,13 @@
 
 module Data.SegTree.Bench where
 
-import           Control.DeepSeq (NFData)
-import           Control.Monad   (replicateM)
-import           Criterion.Main
+import           Control.DeepSeq  (NFData)
+import           Control.Monad    (replicateM)
 import           Data.Monoid
 import           Data.SegTree
-import           GHC.Generics    (Generic)
-import qualified System.Random   as R
+import           GHC.Generics     (Generic)
+import qualified System.Random    as R
+import           Test.Tasty.Bench
 
 deriving instance (R.Random a) => R.Random (Sum a)
 
@@ -45,7 +45,8 @@ randomApply tree = do
   (apply . Plus <$> R.randomIO) <*> pure (min s1 s2) <*> pure (max s1 s2) <*> pure tree
 
 -- Our benchmark harness.
-benchST = env trees $ \ ~(tree_1e4, tree_1e5, tree_1e6) ->
+test_segTree :: Benchmark
+test_segTree = env trees $ \ ~(tree_1e4, tree_1e5, tree_1e6) ->
   bgroup
     "SegTree"
     [ bgroup

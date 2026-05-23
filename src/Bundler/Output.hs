@@ -7,8 +7,13 @@ import           Control.Exception (SomeException, try)
 import           System.Directory  (createDirectoryIfMissing)
 import           System.FilePath   (takeDirectory)
 
-writeBundledSource :: FilePath -> String -> IO (Either BundleError ())
-writeBundledSource path source = do
+writeBundledSource :: Maybe FilePath -> String -> IO (Either BundleError ())
+writeBundledSource Nothing source = do
+  result <- try (putStr source)
+  case result of
+    Left err -> pure (Left (OutputWriteFailed "<stdout>" (show (err :: SomeException))))
+    Right () -> pure (Right ())
+writeBundledSource (Just path) source = do
   result <- try $ do
     createDirectoryIfMissing True (takeDirectory path)
     writeFile path source

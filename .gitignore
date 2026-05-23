@@ -4,7 +4,12 @@ dist-benchmark/
 artifacts/
 bench.html
 bench.json
+bench.csv
+bench.svg
+benchmark-summary.md
 .stack-work/
 *~
 
 .direnv
+
+Out.hs

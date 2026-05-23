@@ -1,10 +1,10 @@
-module Algorithm.KMP.Bench (benchST) where
+module Algorithm.KMP.Bench (test_kmp) where
 
 import           Algorithm.Text.KMP (Automaton, compile)
 import           Control.Monad      (replicateM)
-import           Criterion          (bench, bgroup, env, nfAppIO)
 import           Data.Automaton     (run)
 import           System.Random      (randomIO)
+import           Test.Tasty.Bench   (Benchmark, bench, bgroup, env, nfAppIO)
 
 testAutomaton :: Int -> IO (Automaton Char)
 testAutomaton n = compile <$> testString n
@@ -12,8 +12,8 @@ testAutomaton n = compile <$> testString n
 testString :: Int -> IO [Char]
 testString n = replicateM n randomIO
 
--- Our benchmark harness.
-benchST = env (testAutomaton (10 ^ 4)) $ \auto ->
+test_kmp :: Benchmark
+test_kmp = env (testAutomaton (10 ^ 4)) $ \auto ->
   bgroup
     "KMP"
     [ bgroup

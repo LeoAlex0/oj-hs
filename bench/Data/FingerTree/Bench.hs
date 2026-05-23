@@ -7,11 +7,11 @@ module Data.FingerTree.Bench where
 
 import           Control.DeepSeq         (NFData)
 import           Control.Monad           (replicateM)
-import           Criterion.Main
 import           Data.FingerTree
 import           Data.FingerTree.Measure
 import           GHC.Generics            (Generic)
 import qualified System.Random           as R
+import           Test.Tasty.Bench
 
 deriving instance (R.Random a) => R.Random (Value a)
 
@@ -24,7 +24,8 @@ trees = do
 
 -- Our benchmark harness.
 -- >>> [1..1e5] :: FingerTree Size (Value Int)
-benchFingerTree = env trees $ \ ~(tree_1e4, tree_1e5, tree_1e6) ->
+test_fingerTree :: Benchmark
+test_fingerTree = env trees $ \ ~(tree_1e4, tree_1e5, tree_1e6) ->
   bgroup
     "FingerTree"
     [ bgroup
