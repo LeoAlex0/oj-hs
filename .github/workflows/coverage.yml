@@ -4,7 +4,25 @@ on:
   push:
     branches:
       - master
+    paths:
+      - ".github/workflows/coverage.yml"
+      - "flake.lock"
+      - "flake.nix"
+      - "oj-hs.cabal"
+      - "package.yaml"
+      - "shell.nix"
+      - "src/**"
+      - "test/**"
   pull_request:
+    paths:
+      - ".github/workflows/coverage.yml"
+      - "flake.lock"
+      - "flake.nix"
+      - "oj-hs.cabal"
+      - "package.yaml"
+      - "shell.nix"
+      - "src/**"
+      - "test/**"
   workflow_dispatch:
 
 concurrency:
@@ -41,8 +59,7 @@ jobs:
         run: |
           nix develop --ignore-environment .#ci --command bash -s <<'EOF'
           set -euo pipefail
-          cabal update
-          cabal test --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
+          cabal test --offline --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
 
           # 收集所有 .tix 文件
           mapfile -t tix_files < <(find dist-coverage -name '*.tix' -print)
