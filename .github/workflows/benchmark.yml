@@ -69,8 +69,13 @@ jobs:
           cabal --version
           echo "::endgroup::"
 
+          echo "::group::Cabal dependencies"
+          cabal update
+          cabal build --only-dependencies --enable-benchmarks --builddir=dist-benchmark bench:benchmark-prac-haskell-bench
+          echo "::endgroup::"
+
           echo "::group::Benchmarks"
-          cabal bench --offline --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--csv bench.csv --timeout 20 --stdev 100'
+          cabal bench --offline --enable-benchmarks --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--csv bench.csv --timeout 20 --stdev 100'
           echo "::endgroup::"
           EOF
           awk 'BEGIN { FS = OFS = "," } NR == 1 { print; next } $1 !~ /^All[.]/ { $1 = "All." $1 } { print }' bench.csv > bench.normalized.csv

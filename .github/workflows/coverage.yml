@@ -59,7 +59,13 @@ jobs:
         run: |
           nix develop --ignore-environment .#ci --command bash -s <<'EOF'
           set -euo pipefail
-          cabal test --offline --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
+
+          echo "::group::Cabal dependencies"
+          cabal update
+          cabal build --only-dependencies --enable-tests --builddir=dist-coverage --enable-coverage test:oj-hs-test
+          echo "::endgroup::"
+
+          cabal test --offline --enable-tests --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
 
           # 收集所有 .tix 文件
           mapfile -t tix_files < <(find dist-coverage -name '*.tix' -print)
