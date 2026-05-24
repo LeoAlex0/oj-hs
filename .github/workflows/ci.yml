@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   ci:
-    name: Build, test, lint, and style
+    name: Build, lint, and style
     runs-on: ubuntu-latest
 
     steps:
@@ -76,9 +76,5 @@ jobs:
 
           echo "::group::Build all targets"
           cabal build all
-          echo "::endgroup::"
-
-          echo "::group::Unit tests"
-          cabal test all --test-show-details=direct
           echo "::endgroup::"
           EOF

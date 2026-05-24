@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   coverage:
-    name: Generate coverage report
+    name: Test and generate coverage report
     runs-on: ubuntu-latest
 
     steps:
