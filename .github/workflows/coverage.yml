@@ -36,51 +36,31 @@ jobs:
         with:
           name: oj-hs # 你的 cache 名称
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          # 将 flake 的 devShell 输入也推送到 cache
-          pushFilter: "source-root"
 
       - name: Run tests and collect coverage
         run: |
           nix develop --ignore-environment .#ci --command bash -s <<'EOF'
           set -euo pipefail
-
-          echo "::group::Toolchain"
-          ghc --version
-          cabal --version
-          hpc version
-          echo "::endgroup::"
-
-          echo "::group::Cabal package index"
           cabal update
-          echo "::endgroup::"
-
-          echo "::group::Coverage tests"
           cabal test --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
-          echo "::endgroup::"
 
-          echo "::group::Coverage report"
-          mkdir -p artifacts/coverage
-
-          package_tix="$(find dist-coverage -path "*/hpc/vanilla/tix/*/*.tix" ! -path "*/oj-hs-test/*" -print -quit)"
-          if [ -z "$package_tix" ]; then
-            echo "Could not find package coverage .tix file" >&2
+          # 合并所有生成的 .tix 文件
+          tix_files=$(find dist-coverage -name '*.tix' -print)
+          if [ -z "$tix_files" ]; then
+            echo "No .tix files generated" >&2
             exit 1
           fi
+          hpc combine $tix_files --output=coverage.tix
 
-          package_id="$(basename "$(dirname "$package_tix")")"
-          mix_dir="$(find dist-coverage -path "*/hpc/vanilla/mix/$package_id" -type d -print -quit)"
+          # 直接定位 mix 目录（通常只有一个包，深度匹配即可）
+          mix_dir=$(find dist-coverage -type d -name mix -print -quit)
           if [ -z "$mix_dir" ]; then
-            echo "Could not find package coverage .mix directory for $package_id" >&2
+            echo "Could not find mix directory" >&2
             exit 1
           fi
 
-          hpc report "$package_tix" --hpcdir="$mix_dir" | tee artifacts/coverage/coverage.txt
-
-          html_dir="$(find dist-coverage -path "*/hpc/vanilla/html" -type d -print -quit)"
-          if [ -n "$html_dir" ]; then
-            cp -R "$html_dir" artifacts/coverage/html
-          fi
-          echo "::endgroup::"
+          mkdir -p artifacts/coverage
+          hpc report coverage.tix --hpcdir="$mix_dir" | tee artifacts/coverage/coverage.txt
           EOF
 
       - name: Upload coverage report

@@ -36,8 +36,6 @@ jobs:
         with:
           name: oj-hs # 你的 cache 名称
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          # 将 flake 的 devShell 输入也推送到 cache
-          pushFilter: "source-root"
 
       - name: Run CI checks
         run: |
