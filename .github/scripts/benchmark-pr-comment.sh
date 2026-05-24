@@ -223,7 +223,7 @@ short_sha="${sha:0:12}"
   fi
   echo "Run: [Benchmark workflow artifacts]($run_url)"
   echo
-  echo "Lower mean time is better. Full tasty-bench output is available in the \`benchmark-report\` artifact as \`bench.csv\` and \`bench.svg\`."
+  echo "Lower mean time is better. Full tasty-bench CSV output is available in the \`benchmark-report\` artifact as \`bench.csv\`."
   echo
 
   if [ "$baseline_status" = "available" ]; then

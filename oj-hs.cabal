@@ -225,10 +225,9 @@ test-suite oj-hs-test
 
 benchmark benchmark-prac-haskell-bench
   type: exitcode-stdio-1.0
-  main-is: BenchMain.hs
+  main-is: BenchDiscover.hs
   other-modules:
       Algorithm.KMP.Bench
-      BenchDiscover
       Data.FingerTree.Bench
       Data.SegTree.Bench
       Paths_oj_hs

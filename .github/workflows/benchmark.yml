@@ -39,7 +39,7 @@ jobs:
 
       - name: Run benchmarks
         run: |
-          nix develop --ignore-environment .#ci --command cabal bench --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--csv bench.csv --svg bench.svg --timeout 20 --stdev 100'
+          nix develop --ignore-environment .#ci --command cabal bench --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--csv bench.csv --timeout 20 --stdev 100'
 
       - name: Upload benchmark report
         uses: actions/upload-artifact@v7
@@ -47,5 +47,4 @@ jobs:
           name: benchmark-report
           path: |
             bench.csv
-            bench.svg
           if-no-files-found: error
