@@ -69,8 +69,12 @@ jobs:
           cabal --version
           echo "::endgroup::"
 
+          echo "::group::Cabal package index"
+          cabal update
+          echo "::endgroup::"
+
           echo "::group::Benchmarks"
-          cabal bench --offline --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--csv bench.csv --timeout 20 --stdev 100'
+          cabal bench --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--csv bench.csv --timeout 20 --stdev 100'
           echo "::endgroup::"
           EOF
           awk 'BEGIN { FS = OFS = "," } NR == 1 { print; next } $1 !~ /^All[.]/ { $1 = "All." $1 } { print }' bench.csv > bench.normalized.csv
