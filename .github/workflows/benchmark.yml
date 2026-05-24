@@ -40,6 +40,8 @@ jobs:
       - name: Run benchmarks
         run: |
           nix develop --ignore-environment .#ci --command cabal bench --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--csv bench.csv --timeout 20 --stdev 100'
+          awk 'BEGIN { FS = OFS = "," } NR == 1 { print; next } $1 !~ /^All[.]/ { $1 = "All." $1 } { print }' bench.csv > bench.normalized.csv
+          mv bench.normalized.csv bench.csv
 
       - name: Upload benchmark report
         uses: actions/upload-artifact@v7

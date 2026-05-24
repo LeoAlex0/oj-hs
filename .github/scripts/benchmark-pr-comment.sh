@@ -157,6 +157,7 @@ csv_to_tsv() {
   awk -F ',' '
     NR > 1 && NF >= 2 {
       name = $1
+      sub(/^All[.]/, "", name)
       mean_seconds = $2 / 1000000000000
       print name "\t" mean_seconds
     }
