@@ -7,6 +7,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -27,30 +31,31 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Cache Nix store
-        uses: nix-community/cache-nix-action@v7
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v16
         with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix', 'oj-hs.cabal') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          gc-max-store-size-linux: 5G
+          name: oj-hs # 你的 cache 名称
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          # 将 flake 的 devShell 输入也推送到 cache
+          pushFilter: "source-root"
 
-      - name: Show flake toolchain
-        run: |
-          nix develop --ignore-environment .#ci --command sh -c '
-            ghc --version
-            cabal --version
-            stylish-haskell --version
-            hlint --version
-          '
-
-      - name: Update Cabal package index
-        run: nix develop --ignore-environment .#ci --command cabal update
-
-      - name: Check Haskell formatting
+      - name: Run CI checks
         run: |
           nix develop --ignore-environment .#ci --command bash -s <<'EOF'
           set -euo pipefail
 
+          echo "::group::Toolchain"
+            ghc --version
+            cabal --version
+            stylish-haskell --version
+            hlint --version
+          echo "::endgroup::"
+
+          echo "::group::Cabal package index"
+          cabal update
+          echo "::endgroup::"
+
+          echo "::group::Haskell formatting"
           failed=0
           while IFS= read -r file; do
             formatted="$(mktemp)"
@@ -61,20 +66,21 @@ jobs:
             rm -f "$formatted"
           done < <(git ls-files "*.hs")
 
-          exit "$failed"
-          EOF
+          echo "::endgroup::"
+          if [ "$failed" -ne 0 ]; then
+            exit "$failed"
+          fi
 
-      - name: Run HLint
-        run: |
-          nix develop --ignore-environment .#ci --command bash -s <<'EOF'
-          set -euo pipefail
-
+          echo "::group::HLint"
           mapfile -t files < <(git ls-files "*.hs")
           hlint "${files[@]}"
+          echo "::endgroup::"
+
+          echo "::group::Build all targets"
+          cabal build all
+          echo "::endgroup::"
+
+          echo "::group::Unit tests"
+          cabal test all --test-show-details=direct
+          echo "::endgroup::"
           EOF
-
-      - name: Build all targets
-        run: nix develop --ignore-environment .#ci --command cabal build all
-
-      - name: Run unit tests
-        run: nix develop --ignore-environment .#ci --command cabal test all --test-show-details=direct

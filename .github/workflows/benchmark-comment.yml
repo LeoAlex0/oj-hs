@@ -30,17 +30,13 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Download benchmark artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TRIGGERING_RUN_ID: ${{ github.event.workflow_run.id }}
-        run: |
-          nix develop --ignore-environment .#ci-tools --command env \
-            GH_TOKEN="$GH_TOKEN" \
-            gh run download "$TRIGGERING_RUN_ID" \
-            --repo "${{ github.repository }}" \
-            --name benchmark-report \
-            --dir artifacts/benchmark-current
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v16
+        with:
+          name: oj-hs # 你的 cache 名称
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          # 将 flake 的 devShell 输入也推送到 cache
+          pushFilter: "source-root"
 
       - name: Comment benchmark result
         env:
@@ -50,10 +46,17 @@ jobs:
           nix develop --ignore-environment .#ci-tools --command env \
             GH_TOKEN="$GH_TOKEN" \
             GITHUB_EVENT_PATH="$GITHUB_EVENT_PATH" \
+            GITHUB_REPOSITORY="${{ github.repository }}" \
+            GITHUB_SERVER_URL="${{ github.server_url }}" \
             GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY" \
             TRIGGERING_RUN_ID="$TRIGGERING_RUN_ID" \
             bash -s <<'EOF'
           set -euo pipefail
+
+          gh run download "$TRIGGERING_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name benchmark-report \
+            --dir artifacts/benchmark-current
 
           pr_number="$(jq -r '.workflow_run.pull_requests[0].number // empty' "$GITHUB_EVENT_PATH")"
           base_ref="$(jq -r '.workflow_run.pull_requests[0].base.ref // empty' "$GITHUB_EVENT_PATH")"
@@ -73,9 +76,9 @@ jobs:
             BENCHMARK_SUMMARY="benchmark-summary.md" \
             CURRENT_REF="$current_ref" \
             GH_TOKEN="$GH_TOKEN" \
-            GITHUB_REPOSITORY="${{ github.repository }}" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
             GITHUB_RUN_ID="$TRIGGERING_RUN_ID" \
-            GITHUB_SERVER_URL="${{ github.server_url }}" \
+            GITHUB_SERVER_URL="$GITHUB_SERVER_URL" \
             GITHUB_SHA="$head_sha" \
             GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY" \
             PR_HEAD_REPO="$pr_head_repo" \

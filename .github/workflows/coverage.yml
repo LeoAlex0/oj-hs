@@ -7,6 +7,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -27,26 +31,34 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Show flake toolchain
-        run: |
-          nix develop --ignore-environment .#ci --command sh -c '
-            ghc --version
-            cabal --version
-            hpc version
-          '
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v16
+        with:
+          name: oj-hs # 你的 cache 名称
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          # 将 flake 的 devShell 输入也推送到 cache
+          pushFilter: "source-root"
 
-      - name: Update Cabal package index
-        run: nix develop --ignore-environment .#ci --command cabal update
-
-      - name: Run tests with coverage
-        run: |
-          nix develop --ignore-environment .#ci --command cabal test --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
-
-      - name: Collect coverage report
+      - name: Run tests and collect coverage
         run: |
           nix develop --ignore-environment .#ci --command bash -s <<'EOF'
           set -euo pipefail
 
+          echo "::group::Toolchain"
+          ghc --version
+          cabal --version
+          hpc version
+          echo "::endgroup::"
+
+          echo "::group::Cabal package index"
+          cabal update
+          echo "::endgroup::"
+
+          echo "::group::Coverage tests"
+          cabal test --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
+          echo "::endgroup::"
+
+          echo "::group::Coverage report"
           mkdir -p artifacts/coverage
 
           package_tix="$(find dist-coverage -path "*/hpc/vanilla/tix/*/*.tix" ! -path "*/oj-hs-test/*" -print -quit)"
@@ -68,6 +80,7 @@ jobs:
           if [ -n "$html_dir" ]; then
             cp -R "$html_dir" artifacts/coverage/html
           fi
+          echo "::endgroup::"
           EOF
 
       - name: Upload coverage report
