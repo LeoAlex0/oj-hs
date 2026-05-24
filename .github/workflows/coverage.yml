@@ -44,23 +44,32 @@ jobs:
           cabal update
           cabal test --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
 
-          # 合并所有生成的 .tix 文件
-          tix_files=$(find dist-coverage -name '*.tix' -print)
-          if [ -z "$tix_files" ]; then
+          # 收集所有 .tix 文件
+          mapfile -t tix_files < <(find dist-coverage -name '*.tix' -print)
+          if [ ${#tix_files[@]} -eq 0 ]; then
             echo "No .tix files generated" >&2
             exit 1
           fi
-          hpc combine $tix_files --output=coverage.tix
 
-          # 直接定位 mix 目录（通常只有一个包，深度匹配即可）
-          mix_dir=$(find dist-coverage -type d -name mix -print -quit)
+          # 逐个合并
+          cp "${tix_files[0]}" combined.tix
+          for f in "${tix_files[@]:1}"; do
+            hpc combine combined.tix "$f" --output=tmp.tix
+            mv tmp.tix combined.tix
+          done
+
+          # 查找 mix 目录（查找测试的 mix 目录）
+          mix_dir=$(find dist-coverage -path "*/t/oj-hs-test/build/oj-hs-test/oj-hs-test-tmp/extra-compilation-artifacts/hpc/vanilla/mix" -type d -print -quit 2>/dev/null || true)
+          if [ -z "$mix_dir" ]; then
+            mix_dir=$(find dist-coverage -type d -path "*/hpc/vanilla/mix" -print -quit 2>/dev/null || true)
+          fi
           if [ -z "$mix_dir" ]; then
             echo "Could not find mix directory" >&2
             exit 1
           fi
 
           mkdir -p artifacts/coverage
-          hpc report coverage.tix --hpcdir="$mix_dir" | tee artifacts/coverage/coverage.txt
+          hpc report combined.tix --hpcdir="$mix_dir" | tee artifacts/coverage/coverage.txt
           EOF
 
       - name: Upload coverage report
