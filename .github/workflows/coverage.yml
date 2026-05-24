@@ -58,18 +58,25 @@ jobs:
             mv tmp.tix combined.tix
           done
 
-          # 查找 mix 目录（查找测试的 mix 目录）
-          mix_dir=$(find dist-coverage -path "*/t/oj-hs-test/build/oj-hs-test/oj-hs-test-tmp/extra-compilation-artifacts/hpc/vanilla/mix" -type d -print -quit 2>/dev/null || true)
-          if [ -z "$mix_dir" ]; then
-            mix_dir=$(find dist-coverage -type d -path "*/hpc/vanilla/mix" -print -quit 2>/dev/null || true)
-          fi
-          if [ -z "$mix_dir" ]; then
+          # Cabal splits library and test .mix files; hpc needs both roots.
+          mapfile -t mix_dirs < <(
+            find dist-coverage -type d \
+              \( -path "*/build/extra-compilation-artifacts/hpc/vanilla/mix" \
+              -o -path "*/t/oj-hs-test/build/oj-hs-test/oj-hs-test-tmp/extra-compilation-artifacts/hpc/vanilla/mix" \) \
+              -print
+          )
+          if [ ${#mix_dirs[@]} -eq 0 ]; then
             echo "Could not find mix directory" >&2
             exit 1
           fi
 
+          hpc_args=()
+          for dir in "${mix_dirs[@]}"; do
+            hpc_args+=(--hpcdir="$dir")
+          done
+
           mkdir -p artifacts/coverage
-          hpc report combined.tix --hpcdir="$mix_dir" | tee artifacts/coverage/coverage.txt
+          hpc report combined.tix "${hpc_args[@]}" | tee artifacts/coverage/coverage.txt
           EOF
 
       - name: Upload coverage report
