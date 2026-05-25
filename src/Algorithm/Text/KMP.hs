@@ -46,17 +46,19 @@ instance NFData S
 
 -- | compile use O(|tok|) time to compile an KMP automaton
 compile :: (Eq tok, Ord tok) => [tok] -> Automaton tok
-compile pat = ret
+compile [] = Automaton $ A.listArray (S 0, S 0) [M.empty]
+compile pat = Automaton next
   where
-    ret = Automaton next
-    next = A.listArray (S 0, S (L.length pat)) $ hgoto : L.zipWith (<>) gotos fallbacks
+    n = L.length pat
+    piV = prefix (V.fromList pat)
+    piF = V.toList piV  -- [π[0], π[1], ..., π[n-1]]
 
-    hgoto : gotos = L.zipWith goNext [0 ..] pat <> [M.empty]
-    fallbacks = (next A.!) <$> piF
+    buildState i
+      | i == 0    = M.singleton (pat !! 0) (S 1)
+      | i == n    = next A.! S (piF !! (n - 1))
+      | otherwise = M.insert (pat !! i) (S (i + 1)) (next A.! S (piF !! (i - 1)))
 
-    -- \| prefix function, which also equals `prefix pat`
-    piF = A.scan ret (L.tail pat)
-    goNext s c = M.singleton c (S (s + 1))
+    next = A.listArray (S 0, S n) [buildState i | i <- [0 .. n]]
 
 instance (Eq tok, Ord tok) => A.Automaton (Automaton tok) where
   type State (Automaton tok) = S
