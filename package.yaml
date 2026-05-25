@@ -85,7 +85,7 @@ tests:
 benchmarks:
   benchmark-prac-haskell-bench:
     source-dirs: bench
-    main: BenchMain.hs
+    main: BenchDiscover.hs
     build-tools:
       - tasty-discover
     ghc-options:

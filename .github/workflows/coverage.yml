@@ -4,15 +4,37 @@ on:
   push:
     branches:
       - master
+    paths:
+      - ".github/workflows/coverage.yml"
+      - "flake.lock"
+      - "flake.nix"
+      - "oj-hs.cabal"
+      - "package.yaml"
+      - "shell.nix"
+      - "src/**"
+      - "test/**"
   pull_request:
+    paths:
+      - ".github/workflows/coverage.yml"
+      - "flake.lock"
+      - "flake.nix"
+      - "oj-hs.cabal"
+      - "package.yaml"
+      - "shell.nix"
+      - "src/**"
+      - "test/**"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   coverage:
-    name: Generate coverage report
+    name: Test and generate coverage report
     runs-on: ubuntu-latest
 
     steps:
@@ -27,47 +49,57 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Show flake toolchain
-        run: |
-          nix develop --ignore-environment .#ci --command sh -c '
-            ghc --version
-            cabal --version
-            hpc version
-          '
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v16
+        with:
+          name: oj-hs # 你的 cache 名称
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Update Cabal package index
-        run: nix develop --ignore-environment .#ci --command cabal update
-
-      - name: Run tests with coverage
-        run: |
-          nix develop --ignore-environment .#ci --command cabal test --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
-
-      - name: Collect coverage report
+      - name: Run tests and collect coverage
         run: |
           nix develop --ignore-environment .#ci --command bash -s <<'EOF'
           set -euo pipefail
 
+          echo "::group::Cabal dependencies"
+          cabal update
+          cabal build --only-dependencies --enable-tests --builddir=dist-coverage --enable-coverage test:oj-hs-test
+          echo "::endgroup::"
+
+          cabal test --offline --enable-tests --builddir=dist-coverage --enable-coverage --test-show-details=direct oj-hs-test
+
+          # 收集所有 .tix 文件
+          mapfile -t tix_files < <(find dist-coverage -name '*.tix' -print)
+          if [ ${#tix_files[@]} -eq 0 ]; then
+            echo "No .tix files generated" >&2
+            exit 1
+          fi
+
+          # 逐个合并
+          cp "${tix_files[0]}" combined.tix
+          for f in "${tix_files[@]:1}"; do
+            hpc combine combined.tix "$f" --output=tmp.tix
+            mv tmp.tix combined.tix
+          done
+
+          # Cabal splits library and test .mix files; hpc needs both roots.
+          mapfile -t mix_dirs < <(
+            find dist-coverage -type d \
+              \( -path "*/build/extra-compilation-artifacts/hpc/vanilla/mix" \
+              -o -path "*/t/oj-hs-test/build/oj-hs-test/oj-hs-test-tmp/extra-compilation-artifacts/hpc/vanilla/mix" \) \
+              -print
+          )
+          if [ ${#mix_dirs[@]} -eq 0 ]; then
+            echo "Could not find mix directory" >&2
+            exit 1
+          fi
+
+          hpc_args=()
+          for dir in "${mix_dirs[@]}"; do
+            hpc_args+=(--hpcdir="$dir")
+          done
+
           mkdir -p artifacts/coverage
-
-          package_tix="$(find dist-coverage -path "*/hpc/vanilla/tix/*/*.tix" ! -path "*/oj-hs-test/*" -print -quit)"
-          if [ -z "$package_tix" ]; then
-            echo "Could not find package coverage .tix file" >&2
-            exit 1
-          fi
-
-          package_id="$(basename "$(dirname "$package_tix")")"
-          mix_dir="$(find dist-coverage -path "*/hpc/vanilla/mix/$package_id" -type d -print -quit)"
-          if [ -z "$mix_dir" ]; then
-            echo "Could not find package coverage .mix directory for $package_id" >&2
-            exit 1
-          fi
-
-          hpc report "$package_tix" --hpcdir="$mix_dir" | tee artifacts/coverage/coverage.txt
-
-          html_dir="$(find dist-coverage -path "*/hpc/vanilla/html" -type d -print -quit)"
-          if [ -n "$html_dir" ]; then
-            cp -R "$html_dir" artifacts/coverage/html
-          fi
+          hpc report combined.tix "${hpc_args[@]}" | tee artifacts/coverage/coverage.txt
           EOF
 
       - name: Upload coverage report

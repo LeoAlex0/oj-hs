@@ -1,1 +1,1 @@
-{-# OPTIONS_GHC -F -pgmF tasty-discover -optF --no-main -optF --generated-module -optF BenchDiscover -optF --modules=*Bench.hs #-}
+{-# OPTIONS_GHC -F -pgmF tasty-discover -optF --generated-module -optF Main -optF --modules=*Bench.hs -optF --ingredient -optF Test.Tasty.Bench.consoleBenchReporter -optF --ingredient -optF Test.Tasty.Bench.csvReporter #-}

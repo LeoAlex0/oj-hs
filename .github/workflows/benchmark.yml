@@ -4,8 +4,34 @@ on:
   push:
     branches:
       - master
+    paths:
+      - ".github/scripts/benchmark-pr-comment.sh"
+      - ".github/workflows/benchmark-comment.yml"
+      - ".github/workflows/benchmark.yml"
+      - "bench/**"
+      - "flake.lock"
+      - "flake.nix"
+      - "oj-hs.cabal"
+      - "package.yaml"
+      - "shell.nix"
+      - "src/**"
   pull_request:
+    paths:
+      - ".github/scripts/benchmark-pr-comment.sh"
+      - ".github/workflows/benchmark-comment.yml"
+      - ".github/workflows/benchmark.yml"
+      - "bench/**"
+      - "flake.lock"
+      - "flake.nix"
+      - "oj-hs.cabal"
+      - "package.yaml"
+      - "shell.nix"
+      - "src/**"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -27,19 +53,33 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Show flake toolchain
-        run: |
-          nix develop --ignore-environment .#ci --command sh -c '
-            ghc --version
-            cabal --version
-          '
-
-      - name: Update Cabal package index
-        run: nix develop --ignore-environment .#ci --command cabal update
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v16
+        with:
+          name: oj-hs # 你的 cache 名称
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Run benchmarks
         run: |
-          nix develop --ignore-environment .#ci --command cabal bench --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--csv bench.csv --svg bench.svg --timeout 20 --stdev 100'
+          nix develop --ignore-environment .#ci --command bash -s <<'EOF'
+          set -euo pipefail
+
+          echo "::group::Toolchain"
+          ghc --version
+          cabal --version
+          echo "::endgroup::"
+
+          echo "::group::Cabal dependencies"
+          cabal update
+          cabal build --only-dependencies --enable-benchmarks --builddir=dist-benchmark bench:benchmark-prac-haskell-bench
+          echo "::endgroup::"
+
+          echo "::group::Benchmarks"
+          cabal bench --offline --enable-benchmarks --builddir=dist-benchmark benchmark-prac-haskell-bench --benchmark-options='--csv bench.csv --timeout 20 --stdev 100'
+          echo "::endgroup::"
+          EOF
+          awk 'BEGIN { FS = OFS = "," } NR == 1 { print; next } $1 !~ /^All[.]/ { $1 = "All." $1 } { print }' bench.csv > bench.normalized.csv
+          mv bench.normalized.csv bench.csv
 
       - name: Upload benchmark report
         uses: actions/upload-artifact@v7
@@ -47,5 +87,4 @@ jobs:
           name: benchmark-report
           path: |
             bench.csv
-            bench.svg
           if-no-files-found: error

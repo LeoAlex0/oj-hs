@@ -157,6 +157,7 @@ csv_to_tsv() {
   awk -F ',' '
     NR > 1 && NF >= 2 {
       name = $1
+      sub(/^All[.]/, "", name)
       mean_seconds = $2 / 1000000000000
       print name "\t" mean_seconds
     }
@@ -223,7 +224,7 @@ short_sha="${sha:0:12}"
   fi
   echo "Run: [Benchmark workflow artifacts]($run_url)"
   echo
-  echo "Lower mean time is better. Full tasty-bench output is available in the \`benchmark-report\` artifact as \`bench.csv\` and \`bench.svg\`."
+  echo "Lower mean time is better. Full tasty-bench CSV output is available in the \`benchmark-report\` artifact as \`bench.csv\`."
   echo
 
   if [ "$baseline_status" = "available" ]; then

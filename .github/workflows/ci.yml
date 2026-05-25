@@ -4,15 +4,43 @@ on:
   push:
     branches:
       - master
+    paths:
+      - ".github/workflows/ci.yml"
+      - ".stylish-haskell.yaml"
+      - "app/**"
+      - "bench/**"
+      - "flake.lock"
+      - "flake.nix"
+      - "oj-hs.cabal"
+      - "package.yaml"
+      - "shell.nix"
+      - "src/**"
+      - "test/**"
   pull_request:
+    paths:
+      - ".github/workflows/ci.yml"
+      - ".stylish-haskell.yaml"
+      - "app/**"
+      - "bench/**"
+      - "flake.lock"
+      - "flake.nix"
+      - "oj-hs.cabal"
+      - "package.yaml"
+      - "shell.nix"
+      - "src/**"
+      - "test/**"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   ci:
-    name: Build, test, lint, and style
+    name: Build, lint, and style
     runs-on: ubuntu-latest
 
     steps:
@@ -27,32 +55,28 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Cache Nix store
-        uses: nix-community/cache-nix-action@v7
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v16
         with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix', 'oj-hs.cabal') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          gc-max-store-size-linux: 5G
+          name: oj-hs # 你的 cache 名称
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Show flake toolchain
-        run: |
-          nix develop --ignore-environment .#ci --command sh -c '
-            ghc --version
-            cabal --version
-            stylish-haskell --version
-            hlint --version
-          '
-
-      - name: Update Cabal package index
-        run: nix develop --ignore-environment .#ci --command cabal update
-
-      - name: Check Haskell formatting
+      - name: Run CI checks
         run: |
           nix develop --ignore-environment .#ci --command bash -s <<'EOF'
           set -euo pipefail
 
+          echo "::group::Toolchain"
+            ghc --version
+            cabal --version
+            stylish-haskell --version
+            hlint --version
+          echo "::endgroup::"
+
+          echo "::group::Haskell formatting"
           failed=0
           while IFS= read -r file; do
+            [ -f "$file" ] || continue
             formatted="$(mktemp)"
             stylish-haskell "$file" > "$formatted"
             if ! diff -u "$file" "$formatted"; then
@@ -61,20 +85,17 @@ jobs:
             rm -f "$formatted"
           done < <(git ls-files "*.hs")
 
-          exit "$failed"
-          EOF
+          echo "::endgroup::"
+          if [ "$failed" -ne 0 ]; then
+            exit "$failed"
+          fi
 
-      - name: Run HLint
-        run: |
-          nix develop --ignore-environment .#ci --command bash -s <<'EOF'
-          set -euo pipefail
-
-          mapfile -t files < <(git ls-files "*.hs")
+          echo "::group::HLint"
+          mapfile -t files < <(git ls-files "*.hs" | while IFS= read -r file; do [ -f "$file" ] && printf '%s\n' "$file"; done)
           hlint "${files[@]}"
+          echo "::endgroup::"
+
+          echo "::group::Build executables"
+          cabal build --offline exe:bundler exe:codeforces-wip exe:luogu-wip
+          echo "::endgroup::"
           EOF
-
-      - name: Build all targets
-        run: nix develop --ignore-environment .#ci --command cabal build all
-
-      - name: Run unit tests
-        run: nix develop --ignore-environment .#ci --command cabal test all --test-show-details=direct
