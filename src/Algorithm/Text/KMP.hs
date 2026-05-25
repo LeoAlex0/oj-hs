@@ -51,7 +51,6 @@ instance NFData S
 -- build the fallback edges.  This self-referential / knot-tying is
 -- handled by lazy evaluation.
 compile :: (Eq tok, Ord tok) => [tok] -> Automaton tok
-compile [] = Automaton $ A.listArray (S 0, S 0) [M.empty]
 compile pat = ret
   where
     ret = Automaton next
