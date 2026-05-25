@@ -6,11 +6,11 @@ import           Control.Exception (bracket)
 import           Control.Monad.ST  (runST)
 import qualified Data.ByteString   as BS
 import           Data.Word         (Word)
-import qualified System.IO.Fast    as Fast
-import qualified System.IO.Fast.ST as FastST
 import           System.Directory  (getTemporaryDirectory, removeFile)
 import           System.IO         (Handle, SeekMode (AbsoluteSeek), hClose,
                                     hFlush, hSeek, hSetBinaryMode, openTempFile)
+import qualified System.IO.Fast    as Fast
+import qualified System.IO.Fast.ST as FastST
 import           Test.Hspec        (Spec, describe, it, shouldBe)
 
 spec :: Spec
