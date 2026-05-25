@@ -54,7 +54,7 @@ compile pat = Automaton next
     piF = V.toList piV  -- [π[0], π[1], ..., π[n-1]]
 
     buildState i
-      | i == 0    = M.singleton (pat !! 0) (S 1)
+      | i == 0    = M.singleton (head pat) (S 1)
       | i == n    = next A.! S (piF !! (n - 1))
       | otherwise = M.insert (pat !! i) (S (i + 1)) (next A.! S (piF !! (i - 1)))
 
