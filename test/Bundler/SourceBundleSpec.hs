@@ -152,6 +152,14 @@ spec = describe "Bundler.SourceBundle" $ do
       source `shouldSatisfy` (("main = " ++ generated "Fixture.Entry" "main") `isInfixOf`)
       compileGeneratedSource packageDir source
 
+    it "rewrites operator symbols inside INLINE pragmas" $ \packageDir -> do
+      writeInlineOperatorPragmaFixturePackage packageDir
+      loaded <- shouldRightRender (loadExecutableModules (packageInfo packageDir) (executableInfo packageDir))
+      source <- shouldRightRender (generateSourceBundle ReadableNames (packageInfo packageDir) (executableInfo packageDir) loaded)
+
+      source `shouldSatisfy` (("{-# INLINE (" ++ generated "Fixture.Entry" "<+>" ++ ") #-}") `isInfixOf`)
+      compileGeneratedSource packageDir source
+
 generated :: String -> String -> String
 generated moduleName occurrenceName =
   transformGeneratedIdentifier (generatedIdentifier moduleName occurrenceName)
@@ -408,6 +416,30 @@ writeInternalHelperMainFixturePackage packageDir = do
         , "helper = putStrLn \"entry\""
         , "main :: IO ()"
         , "main = putStrLn \"helper\""
+        ]
+    )
+
+writeInlineOperatorPragmaFixturePackage :: FilePath -> IO ()
+writeInlineOperatorPragmaFixturePackage packageDir = do
+  createDirectoryIfMissing True (packageDir </> "app")
+  createDirectoryIfMissing True (packageDir </> "src" </> "Fixture")
+  writeFile
+    (packageDir </> "app" </> "Main.hs")
+    ( unlines
+        [ "module Main (main) where"
+        , "import Fixture.Entry (main)"
+        ]
+    )
+  writeFile
+    (packageDir </> "src" </> "Fixture" </> "Entry.hs")
+    ( unlines
+        [ "module Fixture.Entry where"
+        , "infixl 6 <+>"
+        , "(<+>) :: Int -> Int -> Int"
+        , "{-# INLINE (<+>) #-}"
+        , "x <+> y = x + y"
+        , "main :: IO ()"
+        , "main = print (40 <+> 2)"
         ]
     )
 
