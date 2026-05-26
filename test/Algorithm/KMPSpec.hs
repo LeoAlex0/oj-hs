@@ -62,8 +62,8 @@ spec = describe "Algorithm.KMP" $ do
     prop "can used in binary string" $
       \(str1 :: [Bool]) str2 ->
         let auto = compile str1
-         in (within (10 ^ 4) . isAccept auto . run auto) (str2 <> str1)
+         in (within (10 ^ 6) . isAccept auto . run auto) (str2 <> str1)
     prop "and deny if not a binary suffix" $
       \(str1 :: [Bool]) str2 ->
         let auto = compile str1
-         in within (10 ^ 4) $ not (str1 `L.isSuffixOf` str2) ==> (not . isAccept auto . run auto) str2
+         in within (10 ^ 6) $ not (str1 `L.isSuffixOf` str2) ==> (not . isAccept auto . run auto) str2

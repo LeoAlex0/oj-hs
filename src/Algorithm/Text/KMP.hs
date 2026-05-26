@@ -44,19 +44,26 @@ newtype S
 
 instance NFData S
 
--- | compile use O(|tok|) time to compile an KMP automaton
+-- | compile use O(|tok|) time to compile an KMP automaton.
+--
+-- The classic online construction: run the partially-built automaton
+-- on @'L.tail' pat@ to compute the prefix function, then use it to
+-- build the fallback edges.  This self-referential / knot-tying is
+-- handled by lazy evaluation.
 compile :: (Eq tok, Ord tok) => [tok] -> Automaton tok
 compile pat = ret
   where
     ret = Automaton next
-    next = A.listArray (S 0, S (L.length pat)) $ hgoto : L.zipWith (<>) gotos fallbacks
+    next = A.listArray (S 0, S n) $ hgoto : L.zipWith (<>) gotos fallbacks
 
     hgoto : gotos = L.zipWith goNext [0 ..] pat <> [M.empty]
-    fallbacks = (next A.!) <$> piF
+    fallbacks    = (next A.!) <$> piF
 
-    -- \| prefix function, which also equals `prefix pat`
-    piF = A.scan ret (L.tail pat)
+    -- prefix function, also equals @'prefix' (V.fromList pat)@
+    piF     = A.scan ret (L.tail pat)
     goNext s c = M.singleton c (S (s + 1))
+
+    n = L.length pat
 
 instance (Eq tok, Ord tok) => A.Automaton (Automaton tok) where
   type State (Automaton tok) = S

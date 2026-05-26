@@ -53,7 +53,6 @@ library
       Solution.Luogu.P3156
       System.IO.Fast
       System.IO.Fast.ST
-      System.IO.Fast.Stream
   other-modules:
       Paths_oj_hs
   autogen-modules:
@@ -76,6 +75,7 @@ library
     , optparse-applicative
     , parsec
     , parser-combinators
+    , primitive
     , process
     , text
     , time
@@ -107,6 +107,7 @@ executable bundler
     , optparse-applicative
     , parsec
     , parser-combinators
+    , primitive
     , process
     , text
     , time
@@ -138,6 +139,7 @@ executable codeforces-wip
     , optparse-applicative
     , parsec
     , parser-combinators
+    , primitive
     , process
     , text
     , time
@@ -169,6 +171,7 @@ executable luogu-wip
     , optparse-applicative
     , parsec
     , parser-combinators
+    , primitive
     , process
     , text
     , time
@@ -187,8 +190,8 @@ test-suite oj-hs-test
       Bundler.RenameSpec
       Bundler.SourceBundleSpec
       Data.TrieSpec
-      Paths_oj_hs
       System.IO.FastSpec
+      Paths_oj_hs
   autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
@@ -216,6 +219,7 @@ test-suite oj-hs-test
     , optparse-applicative
     , parsec
     , parser-combinators
+    , primitive
     , process
     , text
     , time
@@ -230,8 +234,8 @@ benchmark benchmark-prac-haskell-bench
       Algorithm.KMP.Bench
       Data.FingerTree.Bench
       Data.SegTree.Bench
-      Paths_oj_hs
       System.IO.Fast.Bench
+      Paths_oj_hs
   autogen-modules:
       Paths_oj_hs
   hs-source-dirs:
@@ -255,6 +259,7 @@ benchmark benchmark-prac-haskell-bench
     , optparse-applicative
     , parsec
     , parser-combinators
+    , primitive
     , process
     , random
     , tasty

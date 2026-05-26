@@ -1,4 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DataKinds    #-}
+{-# LANGUAGE LinearTypes  #-}
 
 module System.IO.Fast.ST
   ( STScanner
@@ -13,93 +15,110 @@ module System.IO.Fast.ST
   , nextIntListST
   ) where
 
-import           Control.Monad.ST       (ST)
-import qualified Data.ByteString        as BS
-import qualified Data.ByteString.Unsafe as BSU
-import           Data.STRef             (STRef, newSTRef, readSTRef, writeSTRef)
-import           Data.Word              (Word, Word8)
+import           Control.Monad.ST         (ST)
+import qualified Data.ByteString          as BS
+import qualified Data.ByteString.Unsafe   as BSU
+import           Data.Primitive.PrimArray (MutablePrimArray, newPrimArray,
+                                           readPrimArray, writePrimArray)
+import           Data.Word                (Word, Word8)
+import           GHC.Exts                 (Multiplicity (Many))
 
 data STScanner s
-  = STScanner !BS.ByteString !Int !(STRef s Int)
+  = STScanner !BS.ByteString !Int !(MutablePrimArray s Int)
+
+offsetIndex :: Int
+offsetIndex =
+  0
 
 stScannerFromByteString :: BS.ByteString -> ST s (STScanner s)
-stScannerFromByteString bytes =
-  STScanner bytes (BS.length bytes) <$> newSTRef 0
+{-# INLINE stScannerFromByteString #-}
+stScannerFromByteString bytes = do
+  offsetRef <- newPrimArray 1
+  writePrimArray offsetRef offsetIndex 0
+  pure (STScanner bytes (BS.length bytes) offsetRef)
 
-nextIntST :: STScanner s -> ST s Int
+nextIntST :: STScanner s %Many -> ST s Int
+{-# INLINE nextIntST #-}
 nextIntST scanner =
   requireParsed "nextIntST" <$> maybeNextIntST scanner
 
-maybeNextIntST :: STScanner s -> ST s (Maybe Int)
+maybeNextIntST :: STScanner s %Many -> ST s (Maybe Int)
+{-# INLINE maybeNextIntST #-}
 maybeNextIntST scanner@(STScanner bytes _ offsetRef) = do
   hasToken <- skipSpacesST scanner
   if not hasToken
     then pure Nothing
     else do
-      offset <- readSTRef offsetRef
+      offset <- readPrimArray offsetRef offsetIndex
       let word8 = BSU.unsafeIndex bytes offset
       if word8 == minusSign
         then do
-          writeSTRef offsetRef (offset + 1)
+          writePrimArray offsetRef offsetIndex (offset + 1)
           fmap negate <$> parseUnsignedIntST scanner
         else
           if word8 == plusSign
-            then writeSTRef offsetRef (offset + 1) >> parseUnsignedIntST scanner
+            then writePrimArray offsetRef offsetIndex (offset + 1) >> parseUnsignedIntST scanner
             else parseUnsignedIntST scanner
 
-nextIntegerST :: STScanner s -> ST s Integer
+nextIntegerST :: STScanner s %Many -> ST s Integer
+{-# INLINE nextIntegerST #-}
 nextIntegerST scanner@(STScanner bytes _ offsetRef) = do
   hasToken <- skipSpacesST scanner
   if not hasToken
     then inputError "nextIntegerST"
     else do
-      offset <- readSTRef offsetRef
+      offset <- readPrimArray offsetRef offsetIndex
       let word8 = BSU.unsafeIndex bytes offset
       if word8 == minusSign
         then do
-          writeSTRef offsetRef (offset + 1)
+          writePrimArray offsetRef offsetIndex (offset + 1)
           value <- requireParsed "nextIntegerST" <$> parseUnsignedIntegerST scanner
           pure (-value)
         else
           if word8 == plusSign
             then do
-              writeSTRef offsetRef (offset + 1)
+              writePrimArray offsetRef offsetIndex (offset + 1)
               requireParsed "nextIntegerST" <$> parseUnsignedIntegerST scanner
             else requireParsed "nextIntegerST" <$> parseUnsignedIntegerST scanner
 
-nextWordST :: STScanner s -> ST s Word
+nextWordST :: STScanner s %Many -> ST s Word
+{-# INLINE nextWordST #-}
 nextWordST scanner = do
   hasToken <- skipSpacesST scanner
   if not hasToken
     then inputError "nextWordST"
     else requireParsed "nextWordST" <$> parseUnsignedWordST scanner
 
-nextByteStringST :: STScanner s -> ST s BS.ByteString
+nextByteStringST :: STScanner s %Many -> ST s BS.ByteString
+{-# INLINE nextByteStringST #-}
 nextByteStringST scanner =
   requireParsed "nextByteStringST" <$> maybeNextByteStringST scanner
 
-maybeNextByteStringST :: STScanner s -> ST s (Maybe BS.ByteString)
+maybeNextByteStringST :: STScanner s %Many -> ST s (Maybe BS.ByteString)
+{-# INLINE maybeNextByteStringST #-}
 maybeNextByteStringST scanner@(STScanner bytes len offsetRef) = do
   hasToken <- skipSpacesST scanner
   if not hasToken
     then pure Nothing
     else do
-      start <- readSTRef offsetRef
+      start <- readPrimArray offsetRef offsetIndex
       let end = scanTokenEnd bytes len start
-      writeSTRef offsetRef end
+      writePrimArray offsetRef offsetIndex end
       pure (Just (BS.take (end - start) (BS.drop start bytes)))
 
-nextCharST :: STScanner s -> ST s Char
+nextCharST :: STScanner s %Many -> ST s Char
+{-# INLINE nextCharST #-}
 nextCharST scanner@(STScanner bytes _ offsetRef) = do
   hasToken <- skipSpacesST scanner
   if not hasToken
     then inputError "nextCharST"
     else do
-      offset <- readSTRef offsetRef
-      writeSTRef offsetRef (offset + 1)
+      offset <- readPrimArray offsetRef offsetIndex
+      writePrimArray offsetRef offsetIndex (offset + 1)
       pure (toEnum (fromIntegral (BSU.unsafeIndex bytes offset)))
 
-nextIntListST :: Int -> STScanner s -> ST s [Int]
+nextIntListST :: Int -> STScanner s %Many -> ST s [Int]
+{-# INLINE nextIntListST #-}
 nextIntListST count scanner =
   go count []
   where
@@ -109,9 +128,10 @@ nextIntListST count scanner =
           value <- nextIntST scanner
           go (remaining - 1) (value : values)
 
-parseUnsignedIntST :: STScanner s -> ST s (Maybe Int)
+parseUnsignedIntST :: STScanner s %Many -> ST s (Maybe Int)
+{-# INLINE parseUnsignedIntST #-}
 parseUnsignedIntST scanner@(STScanner bytes len offsetRef) = do
-  offset <- readSTRef offsetRef
+  offset <- readPrimArray offsetRef offsetIndex
   if offset < len
     then do
       let word8 = BSU.unsafeIndex bytes offset
@@ -119,14 +139,15 @@ parseUnsignedIntST scanner@(STScanner bytes len offsetRef) = do
         then do
           let (!value, !end) =
                 parseIntDigitsAt bytes len (offset + 1) (digitValue word8)
-          writeSTRef offsetRef end
+          writePrimArray offsetRef offsetIndex end
           pure (Just value)
         else pure Nothing
     else pure Nothing
 
-parseUnsignedIntegerST :: STScanner s -> ST s (Maybe Integer)
+parseUnsignedIntegerST :: STScanner s %Many -> ST s (Maybe Integer)
+{-# INLINE parseUnsignedIntegerST #-}
 parseUnsignedIntegerST scanner@(STScanner bytes len offsetRef) = do
-  offset <- readSTRef offsetRef
+  offset <- readPrimArray offsetRef offsetIndex
   if offset < len
     then do
       let word8 = BSU.unsafeIndex bytes offset
@@ -134,14 +155,15 @@ parseUnsignedIntegerST scanner@(STScanner bytes len offsetRef) = do
         then do
           let (!value, !end) =
                 parseIntegerDigitsAt bytes len (offset + 1) (fromIntegral (digitValue word8))
-          writeSTRef offsetRef end
+          writePrimArray offsetRef offsetIndex end
           pure (Just value)
         else pure Nothing
     else pure Nothing
 
-parseUnsignedWordST :: STScanner s -> ST s (Maybe Word)
+parseUnsignedWordST :: STScanner s %Many -> ST s (Maybe Word)
+{-# INLINE parseUnsignedWordST #-}
 parseUnsignedWordST scanner@(STScanner bytes len offsetRef) = do
-  offset <- readSTRef offsetRef
+  offset <- readPrimArray offsetRef offsetIndex
   if offset < len
     then do
       let word8 = BSU.unsafeIndex bytes offset
@@ -149,24 +171,28 @@ parseUnsignedWordST scanner@(STScanner bytes len offsetRef) = do
         then do
           let (!value, !end) =
                 parseWordDigitsAt bytes len (offset + 1) (fromIntegral (digitValue word8))
-          writeSTRef offsetRef end
+          writePrimArray offsetRef offsetIndex end
           pure (Just value)
         else pure Nothing
     else pure Nothing
 
 parseIntDigitsAt :: BS.ByteString -> Int -> Int -> Int -> (Int, Int)
+{-# INLINE parseIntDigitsAt #-}
 parseIntDigitsAt =
   parseDigitsAt (\acc word8 -> acc * 10 + digitValue word8)
 
 parseIntegerDigitsAt :: BS.ByteString -> Int -> Int -> Integer -> (Integer, Int)
+{-# INLINE parseIntegerDigitsAt #-}
 parseIntegerDigitsAt =
   parseDigitsAt (\acc word8 -> acc * 10 + fromIntegral (digitValue word8))
 
 parseWordDigitsAt :: BS.ByteString -> Int -> Int -> Word -> (Word, Int)
+{-# INLINE parseWordDigitsAt #-}
 parseWordDigitsAt =
   parseDigitsAt (\acc word8 -> acc * 10 + fromIntegral (digitValue word8))
 
 parseDigitsAt :: (a -> Word8 -> a) -> BS.ByteString -> Int -> Int -> a -> (a, Int)
+{-# INLINE parseDigitsAt #-}
 parseDigitsAt appendDigit bytes len =
   go
   where
@@ -178,14 +204,16 @@ parseDigitsAt appendDigit bytes len =
                 else (acc, offset)
       | otherwise = (acc, offset)
 
-skipSpacesST :: STScanner s -> ST s Bool
+skipSpacesST :: STScanner s %Many -> ST s Bool
+{-# INLINE skipSpacesST #-}
 skipSpacesST (STScanner bytes len offsetRef) = do
-  offset <- readSTRef offsetRef
+  offset <- readPrimArray offsetRef offsetIndex
   let !nextOffset = scanPastSpaces bytes len offset
-  writeSTRef offsetRef nextOffset
+  writePrimArray offsetRef offsetIndex nextOffset
   pure (nextOffset < len)
 
 scanPastSpaces :: BS.ByteString -> Int -> Int -> Int
+{-# INLINE scanPastSpaces #-}
 scanPastSpaces bytes len =
   go
   where
@@ -194,6 +222,7 @@ scanPastSpaces bytes len =
       | otherwise = offset
 
 scanTokenEnd :: BS.ByteString -> Int -> Int -> Int
+{-# INLINE scanTokenEnd #-}
 scanTokenEnd bytes len =
   go
   where
@@ -202,18 +231,22 @@ scanTokenEnd bytes len =
       | otherwise = offset
 
 digitValue :: Word8 -> Int
+{-# INLINE digitValue #-}
 digitValue word8 =
   fromIntegral (word8 - zeroChar)
 
 isSpaceWord8 :: Word8 -> Bool
+{-# INLINE isSpaceWord8 #-}
 isSpaceWord8 word8 =
   word8 <= spaceChar
 
 isDigitWord8 :: Word8 -> Bool
+{-# INLINE isDigitWord8 #-}
 isDigitWord8 word8 =
   zeroChar <= word8 && word8 <= nineChar
 
 requireParsed :: String -> Maybe a -> a
+{-# INLINE requireParsed #-}
 requireParsed _ (Just value) = value
 requireParsed name Nothing   = inputError name
 

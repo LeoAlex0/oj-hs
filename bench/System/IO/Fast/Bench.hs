@@ -11,7 +11,6 @@ import           Data.Char               (isSpace)
 import           Data.List               (foldl')
 import qualified System.IO.Fast          as Fast
 import qualified System.IO.Fast.ST       as FastST
-import qualified System.IO.Fast.Stream   as FastStream
 import           Test.Tasty.Bench        (Benchmark, bench, bgroup, env, nf,
                                           nfAppIO)
 import           Text.Printf             (printf)
@@ -49,9 +48,8 @@ inputSmallBenchmarks =
       "Input/sum 1e5 Int"
       [ bench "read . words" $ nf sumReadWords input
       , bench "ByteString.readInt" $ nf sumByteStringReadInt input
-      , bench "System.IO.Fast.Scanner" $ nf sumFastScanner input
+      , bench "System.IO.Fast.Scanner" $ nfAppIO sumFastScanner input
       , bench "System.IO.Fast.STScanner" $ nf sumFastSTScanner input
-      , bench "System.IO.Fast.StreamScanner" $ nfAppIO sumFastStreamScanner input
       ]
 
 inputLargeBenchmarks :: Benchmark
@@ -60,9 +58,8 @@ inputLargeBenchmarks =
     bgroup
       "Input/sum 1e8 Int in 1e5-token chunks"
       [ bench "ByteString.readInt" $ nf (sumByteStringReadIntRepeated chunkRepeats) inputChunk
-      , bench "System.IO.Fast.Scanner" $ nf (sumFastScannerRepeated chunkRepeats) inputChunk
+      , bench "System.IO.Fast.Scanner" $ nfAppIO (sumFastScannerRepeated chunkRepeats) inputChunk
       , bench "System.IO.Fast.STScanner" $ nf (sumFastSTScannerRepeated chunkRepeats) inputChunk
-      , bench "System.IO.Fast.StreamScanner" $ nfAppIO (sumFastStreamScannerRepeated chunkRepeats) inputChunk
       ]
 
 outputSmallBenchmarks :: Benchmark
@@ -99,15 +96,21 @@ sumByteStringReadInt =
         Just (value, remaining) -> go (acc + value) remaining
         Nothing                 -> acc
 
-sumFastScanner :: BS.ByteString -> Int
+sumFastScanner :: BS.ByteString -> IO Int
 {-# NOINLINE sumFastScanner #-}
-sumFastScanner =
-  go 0 . Fast.scannerFromByteString
+sumFastScanner input = do
+  scanner <- Fast.scannerFromByteString input
+  sumFastScannerFrom scanner
+
+sumFastScannerFrom :: Fast.Scanner -> IO Int
+sumFastScannerFrom =
+  go 0
   where
-    go !acc scanner =
-      case Fast.maybeNextInt scanner of
-        Just (value, nextScanner) -> go (acc + value) nextScanner
-        Nothing                   -> acc
+    go !acc scanner = do
+      next <- Fast.maybeNextInt scanner
+      case next of
+        Just value -> go (acc + value) scanner
+        Nothing    -> pure acc
 
 sumFastSTScanner :: BS.ByteString -> Int
 {-# NOINLINE sumFastSTScanner #-}
@@ -118,22 +121,6 @@ sumFastSTScanner input =
   where
     go !acc scanner = do
       next <- FastST.maybeNextIntST scanner
-      case next of
-        Just value -> go (acc + value) scanner
-        Nothing    -> pure acc
-
-sumFastStreamScanner :: BS.ByteString -> IO Int
-{-# NOINLINE sumFastStreamScanner #-}
-sumFastStreamScanner input = do
-  scanner <- FastStream.streamScannerFromChunks (byteStringChunks FastStream.defaultStreamChunkSize input)
-  sumFastStreamScannerFrom scanner
-
-sumFastStreamScannerFrom :: FastStream.StreamScanner -> IO Int
-sumFastStreamScannerFrom =
-  go 0
-  where
-    go !acc scanner = do
-      next <- FastStream.maybeNextIntIO scanner
       case next of
         Just value -> go (acc + value) scanner
         Nothing    -> pure acc
@@ -157,24 +144,20 @@ sumByteStringReadIntRepeated :: Int -> BS.ByteString -> Int
 sumByteStringReadIntRepeated repeats =
   sumRepeated repeats sumByteStringReadInt
 
-sumFastScannerRepeated :: Int -> BS.ByteString -> Int
-sumFastScannerRepeated repeats =
-  sumRepeated repeats sumFastScanner
+sumFastScannerRepeated :: Int -> BS.ByteString -> IO Int
+sumFastScannerRepeated repeats input =
+  go repeats 0
+  where
+    go !remaining !acc
+      | remaining <= 0 = pure acc
+      | otherwise = do
+          scanner <- Fast.scannerFromByteString (sameByteString remaining input)
+          !chunkSum <- sumFastScannerFrom scanner
+          go (remaining - 1) (acc + chunkSum)
 
 sumFastSTScannerRepeated :: Int -> BS.ByteString -> Int
 sumFastSTScannerRepeated repeats =
   sumRepeated repeats sumFastSTScanner
-
-sumFastStreamScannerRepeated :: Int -> BS.ByteString -> IO Int
-sumFastStreamScannerRepeated repeats input = do
-  scanner <- FastStream.streamScannerFromChunks repeatedChunks
-  sumFastStreamScannerFrom scanner
-  where
-    inputChunks =
-      byteStringChunks FastStream.defaultStreamChunkSize (input <> BSC.singleton ' ')
-
-    repeatedChunks =
-      concat (replicate repeats inputChunks)
 
 sumRepeated :: Int -> (BS.ByteString -> Int) -> BS.ByteString -> Int
 sumRepeated repeats parser input =
@@ -205,13 +188,3 @@ sameByteString _ =
 sameInt :: Int -> Int -> Int
 sameInt _ =
   id
-
-byteStringChunks :: Int -> BS.ByteString -> [BS.ByteString]
-byteStringChunks chunkSize =
-  go
-  where
-    go bytes
-      | BS.null bytes = []
-      | otherwise =
-          let (chunk, remaining) = BS.splitAt chunkSize bytes
-           in chunk : go remaining

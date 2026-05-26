@@ -39,6 +39,7 @@ dependencies:
   - hashable
   - optparse-applicative
   - process
+  - primitive
   - time
   - unordered-containers
 
