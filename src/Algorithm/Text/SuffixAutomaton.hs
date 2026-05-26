@@ -2,8 +2,7 @@
 
 module Algorithm.Text.SuffixAutomaton where
 
-import           Data.List   (inits, isSuffixOf)
-import qualified Data.Vector
+import           Data.List (inits, isSuffixOf)
 
 -- >>> endpos "abcdeabcd" "abc"
 endpos :: String -> String -> [Int]

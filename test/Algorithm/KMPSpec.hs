@@ -4,41 +4,29 @@
 
 module Algorithm.KMPSpec where
 
-import           Algorithm.Text.KMP        (compile, prefix)
-import           Data.Automaton            (Automaton (isAccept), run)
-import qualified Data.ByteString           as BS (isSuffixOf, unpack)
-import           Data.List                 as L (isSuffixOf)
-import           Data.String               (IsString (..))
-import           Data.Vector               as V (Vector, fromList, length, null,
-                                                 toList, (!))
-import           Test.Hspec                (Spec, describe, it, shouldBe)
-import           Test.Hspec.QuickCheck     (prop)
-import           Test.HUnit                ((@?=))
-import           Test.QuickCheck           (ASCIIString (ASCIIString),
-                                            Arbitrary (arbitrary),
-                                            Args (maxSize),
-                                            NonNegative (NonNegative),
-                                            PrintableString (PrintableString),
-                                            choose, disjoin, expectFailure,
-                                            forAll, getSize, vector, within,
-                                            (.&&.), (===), (==>))
-import           Test.QuickCheck.Modifiers (Positive (Positive))
-
-instance (Arbitrary a) => Arbitrary (V.Vector a) where
-  arbitrary = V.fromList <$> arbitrary
+import           Algorithm.Text.KMP    (compile, prefix)
+import           Data.Automaton        (Automaton (isAccept), run)
+import qualified Data.ByteString       as BS (isSuffixOf, unpack)
+import           Data.List             as L (isSuffixOf)
+import           Data.String           (IsString (..))
+import           Test.Hspec            (Spec, describe, it, shouldBe)
+import           Test.Hspec.QuickCheck (prop)
+import           Test.QuickCheck       (PrintableString (PrintableString),
+                                        choose, forAll, within, (.&&.), (===),
+                                        (==>))
 
 spec :: Spec
 spec = describe "Algorithm.KMP" $ do
   describe "prefix function" $ do
     it "simple test case" $ do
-      (prefix . V.fromList) "" `shouldBe` [0]
-      (prefix . V.fromList) "aabaaab" `shouldBe` [0, 1, 0, 1, 2, 2, 3]
+      prefix "" `shouldBe` [0]
+      prefix "aabaaab" `shouldBe` [0, 1, 0, 1, 2, 2, 3]
     prop "prefix function must meet the define: case [0]" $
-      \str -> within (10 ^ 6) $ prefix @Char str ! 0 === 0
+      \str -> within (10 ^ 6) $ head (prefix @Char str) === 0
     prop "prefix function must meet the define:" $
-      \str -> within (10 ^ 6) $ (not . V.null) str ==> forAll (choose (0, V.length str - 1)) $ \i ->
-        let pI = (prefix @Char str ! i)
-            pred k = [str ! j | j <- [0 .. k - 1]] == [str ! j | j <- [i - (k - 1) .. i]]
+      \str -> within (10 ^ 6) $ not (null str) ==> forAll (choose (0, length str - 1)) $ \i ->
+        let pI = prefix @Char str !! i
+            pred k = [str !! j | j <- [0 .. k - 1]] == [str !! j | j <- [i - (k - 1) .. i]]
          in pred pI .&&. (pI < i ==> forAll (choose (pI + 1, i)) (not . pred))
 
   describe "KMP automaton" $ do

@@ -80,7 +80,6 @@ library
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 executable bundler
@@ -112,7 +111,6 @@ executable bundler
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 executable codeforces-wip
@@ -144,7 +142,6 @@ executable codeforces-wip
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 executable luogu-wip
@@ -176,7 +173,6 @@ executable luogu-wip
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 test-suite oj-hs-test
@@ -225,7 +221,6 @@ test-suite oj-hs-test
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 benchmark benchmark-prac-haskell-bench
@@ -268,5 +263,4 @@ benchmark benchmark-prac-haskell-bench
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
