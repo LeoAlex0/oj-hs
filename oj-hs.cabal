@@ -183,6 +183,7 @@ test-suite oj-hs-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Algorithm.AhoCorasickSpec
       Algorithm.KMPSpec
       Bundler.GHCSpec
       Bundler.IntegrationSpec
