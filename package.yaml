@@ -31,7 +31,6 @@ dependencies:
   - deepseq
   - array
   - containers
-  - vector
   - text
   - bytestring
   - filepath

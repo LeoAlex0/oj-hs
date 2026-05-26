@@ -80,7 +80,6 @@ library
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 executable bundler
@@ -112,7 +111,6 @@ executable bundler
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 executable codeforces-wip
@@ -144,7 +142,6 @@ executable codeforces-wip
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 executable luogu-wip
@@ -176,13 +173,13 @@ executable luogu-wip
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 test-suite oj-hs-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Algorithm.AhoCorasickSpec
       Algorithm.KMPSpec
       Bundler.GHCSpec
       Bundler.IntegrationSpec
@@ -224,7 +221,6 @@ test-suite oj-hs-test
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
 
 benchmark benchmark-prac-haskell-bench
@@ -267,5 +263,4 @@ benchmark benchmark-prac-haskell-bench
     , text
     , time
     , unordered-containers
-    , vector
   default-language: Haskell2010
