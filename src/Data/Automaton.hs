@@ -41,10 +41,11 @@ run a ts = runFrom a ts (initialState a)
 ----------------------------------------------------------------------
 
 -- | Completed transition table plus failure links.
-data FailureTable tok = FailureTable
-  { transitions :: A.Array Int (M.Map tok Int)
-  , fallbacks   :: A.Array Int Int
-  }
+data FailureTable tok
+  = FailureTable
+      { transitions :: A.Array Int (M.Map tok Int)
+      , fallbacks   :: A.Array Int Int
+      }
 
 -- | Build a transition table via lazy knot-tying — the common core of
 -- both KMP and Aho-Corasick.

@@ -1,7 +1,7 @@
-{-# LANGUAGE BangPatterns  #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies  #-}
+{-# LANGUAGE TypeFamilies        #-}
 
 module Algorithm.Text.KMP (prefix, compile, Automaton) where
 

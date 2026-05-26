@@ -1,5 +1,5 @@
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TypeFamilies  #-}
 
 module Algorithm.Text.AhoCorasick
   ( -- * Compilation
@@ -9,29 +9,30 @@ module Algorithm.Text.AhoCorasick
   , Automaton
   ) where
 
-import           Control.DeepSeq     (NFData)
-import qualified Data.Array          as Arr
-import qualified Data.Automaton      as Auto
-import           Data.Coerce         (coerce)
-import qualified Data.IntMap.Strict  as IM
-import qualified Data.IntSet         as IS
-import qualified Data.List           as L
-import qualified Data.Map            as M
-import           Data.Maybe          (fromMaybe)
-import qualified Data.Trie           as Trie
-import           Data.Trie           (Trie (..))
-import           GHC.Generics        (Generic)
+import           Control.DeepSeq    (NFData)
+import qualified Data.Array         as Arr
+import qualified Data.Automaton     as Auto
+import           Data.Coerce        (coerce)
+import qualified Data.IntMap.Strict as IM
+import qualified Data.IntSet        as IS
+import qualified Data.List          as L
+import qualified Data.Map           as M
+import           Data.Maybe         (fromMaybe)
+import           Data.Trie          (Trie (..))
+import qualified Data.Trie          as Trie
+import           GHC.Generics       (Generic)
 
 ----------------------------------------------------------------------
 -- Trie compilation
 ----------------------------------------------------------------------
 
-data TrieTable tok = TrieTable
-  { ttSize     :: !Int
-  , ttGotos    :: !(IM.IntMap (M.Map tok Int))
-  , ttAccept   :: !IS.IntSet
-  , ttAncestry :: !(IM.IntMap (Int, tok))
-  }
+data TrieTable tok
+  = TrieTable
+      { ttSize     :: !Int
+      , ttGotos    :: !(IM.IntMap (M.Map tok Int))
+      , ttAccept   :: !IS.IntSet
+      , ttAncestry :: !(IM.IntMap (Int, tok))
+      }
 
 numberTrie :: (Ord tok) => Trie tok -> TrieTable tok
 numberTrie = finish . go 0 1 emptyTable
